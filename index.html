@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1a6cf0"><meta name="color-scheme" content="light">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Entrega Fácil">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="icon" href="assets/icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css"><title>Entrega Fácil</title></head><body>
+<div id="toast" role="status"></div>
+<main id="auth" hidden>
+ <img src="assets/icons/icon-192.png" class="logo" alt="">
+ <h1>Entrega Fácil</h1><p class="mut">Registre e comprove suas entregas.</p>
+ <div id="a-home"><button class="btn pri" data-go="cad">Criar minha conta</button><button class="btn" data-go="log">Já tenho uma conta — Entrar</button></div>
+ <form id="f-cad" hidden>
+  <label>Nome completo<input name="nome" required autocomplete="name"></label>
+  <label>Empresa em que trabalha<input name="empresa" required></label>
+  <label>E-mail<input name="email" type="email" required autocomplete="email"></label>
+  <label>Senha (mín. 6 caracteres)<input name="senha" type="password" minlength="6" required autocomplete="new-password"></label>
+  <button class="btn pri">Criar conta</button><button type="button" class="btn" data-go="home">Voltar</button>
+ </form>
+ <form id="f-log" hidden>
+  <label>E-mail<input name="email" type="email" required autocomplete="email"></label>
+  <label>Senha<input name="senha" type="password" required autocomplete="current-password"></label>
+  <button class="btn pri">Entrar</button>
+  <button type="button" class="btn" id="b-rec">Esqueci minha senha</button>
+  <button type="button" class="btn" data-go="home">Voltar</button>
+ </form>
+ <p class="mut peq">A localização só é coletada com a sua permissão no navegador.</p>
+</main>
+<main id="app" hidden>
+ <header class="top"><h1>Entrega Fácil</h1><span id="quem" class="mut peq"></span><button class="btn peqb" id="b-sair">Sair</button></header>
+ <section id="v-agenda" class="view"></section>
+ <section id="v-hist" class="view" hidden></section>
+ <section id="v-res" class="view" hidden></section>
+ <section id="v-admin" class="view" hidden></section>
+ <nav class="bar">
+  <button data-v="agenda" class="on"><span>📅</span>Agenda</button>
+  <button data-v="hist"><span>🕘</span>Histórico</button>
+  <button data-v="res"><span>📊</span>Resumo</button>
+  <button data-v="admin"><span>⚙️</span>Admin</button>
+ </nav>
+</main>
+<div id="modal" hidden></div>
+<script type="module" src="js/app.js"></script>
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("service-worker.js"))</script>
+</body></html>

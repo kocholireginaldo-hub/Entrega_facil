@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function logado() { return request.auth != null; }
+
+    // Administrador = quem tem uma sessão administrativa válida (criada pelo app com a senha correta, válida por 60 minutos).
+    // Só é avaliada quando a condição de "dono" falha, então usuários comuns não geram leituras extras.
+    function admin() {
+      return logado()
+        && exists(/databases/$(database)/documents/adminSessions/$(request.auth.uid))
+        && request.time < get(/databases/$(database)/documents/adminSessions/$(request.auth.uid)).data.criadoEm + duration.value(60, 'm');
+    }
+
+    // Sessão administrativa. A SENHA '3030' É CONFERIDA AQUI, NO SERVIDOR. Se mudar ADMIN_PIN no index.html, mude também aqui.
+    match /adminSessions/{uid} {
+      allow create, update: if logado() && request.auth.uid == uid
+        && request.resource.data.pin == '3030'
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.keys().hasOnly(['pin', 'criadoEm']);
+      allow delete: if logado() && request.auth.uid == uid;   // "Sair do painel" e logout bloqueiam também no servidor
+      allow read: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if logado() && (request.auth.uid == uid || admin());
+      allow create: if logado() && request.auth.uid == uid && request.resource.data.uid == uid && request.resource.data.role == 'employee';
+      allow update: if logado() && request.auth.uid == uid && request.resource.data.uid == uid && request.resource.data.role == resource.data.role;
+      allow delete: if false;
+    }
+
+    match /deliveries/{id} {
+      allow read: if logado() && (resource.data.userId == request.auth.uid || admin());
+      allow create: if logado() && request.resource.data.userId == request.auth.uid
+        && request.resource.data.deliveryType in ['standard', 'special']
+        && request.resource.data.hasPhoto == true
+        && request.resource.data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/photos/$(id)).data.userId == request.auth.uid;
+      allow update: if false;   // registros imutáveis
+      allow delete: if logado() && (resource.data.userId == request.auth.uid || admin());
+    }
+
+    match /photos/{id} {
+      allow read: if logado() && (resource.data.userId == request.auth.uid || admin());
+      allow create: if logado() && request.resource.data.userId == request.auth.uid
+        && request.resource.data.photoData is string
+        && request.resource.data.photoData.size() < 400000
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if logado() && (resource.data.userId == request.auth.uid || admin());
+    }
+  }
+}

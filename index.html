@@ -56,6 +56,12 @@ dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:8px}dd{margin:0;font-w
 #toast{position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top,0px));z-index:50;padding:12px;border-radius:12px;color:#fff;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s}
 #toast.show{opacity:1}#toast.ok{background:var(--vd)}#toast.err{background:var(--vm)}#toast.warn{background:#b45309}
 
+:root{--ro:#e11d74;--ro2:#ffe3ef}
+.card.col{border-left-color:var(--ro);background:var(--ro2)}.tag.col{background:var(--ro);color:#fff}
+.tabs.t3{grid-template-columns:1fr 1fr 1fr}.tabs.t3 button{font-size:13px;padding:0 4px}.tabs .on.c{background:var(--ro);border-color:var(--ro);color:#fff}
+.aviso.ro{background:var(--ro2);border-color:var(--ro)}
+#net{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 14px;font-size:14px;font-weight:600;background:var(--am2);border-bottom:1px solid var(--am)}
+#net.off{background:#fde8e8;border-color:var(--vm)}#net button{min-height:34px;padding:0 12px;border-radius:10px;border:1px solid var(--bd);background:#fff;font-weight:600}
 #aviso{position:fixed;left:8px;right:8px;bottom:calc(70px + env(safe-area-inset-bottom,0px));z-index:60;background:#b42318;color:#fff;padding:10px;border-radius:12px;font-size:14px}
 </style></head><body>
 <div id="aviso" hidden role="alert"></div>
@@ -82,6 +88,7 @@ dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:8px}dd{margin:0;font-w
 </main>
 <main id="app" hidden>
  <header class="top"><h1>Entrega Fácil</h1><span id="quem" class="mut peq"></span><button class="btn peqb" id="b-sair">Sair</button></header>
+ <div id="net" hidden></div>
  <section id="v-agenda" class="view"></section>
  <section id="v-hist" class="view" hidden></section>
  <section id="v-res" class="view" hidden></section>
@@ -113,7 +120,13 @@ const p2 = n => String(n).padStart(2, "0");
 const isoData = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
 const horaHM = d => `${p2(d.getHours())}:${p2(d.getMinutes())}`;
 const fmtData = iso => (iso || "").split("-").reverse().join("/");
-const fmtCriado = d => d.createdAt?.toDate ? d.createdAt.toDate().toLocaleString("pt-BR") : "—";
+const paraData = v => v?.toDate ? v.toDate() : (v instanceof Date ? v : null);
+const fmtCriado = d => {
+  const c = paraData(d.createdAt), dev = paraData(d.deviceCreatedAt), loc = x => x.toLocaleString("pt-BR");
+  if (d.pendente) return dev ? `${loc(dev)} (guardado no aparelho, aguardando envio à nuvem)` : "aguardando envio";
+  if (d.registradoOffline && dev) return `${loc(dev)} no aparelho (enviado à nuvem em ${c ? loc(c) : "—"})`;
+  return c ? loc(c) : "—";
+};
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 let tt;
 function toast(m, tipo = "ok") { const t = $("#toast"); t.textContent = m; t.className = "show " + tipo; clearTimeout(tt); tt = setTimeout(() => t.className = "", 5500); }
@@ -150,7 +163,9 @@ async function iniciarFirebase() {   // carregado dinamicamente: se a CDN falhar
   A = authM; F = fsM; auth = A.getAuth(app); db = F.getFirestore(app);
 }
 const exigir = () => { if (!auth || !db) throw new Error("Firebase indisponível. Verifique a configuração e a conexão e recarregue a página."); };
-const comTempo = (p, ms, msg) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error(msg)), ms))]);
+const comTempo = (p, ms, msg) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(Object.assign(new Error(msg), {rede: true})), ms))]);
+// Falha de conexão (e não de permissão/regra): é o caso em que o registro vai para a fila local.
+const ehRede = e => !!e?.rede || ["unavailable", "network-request-failed", "deadline-exceeded"].includes(e?.code) || /offline|network|failed to fetch/i.test(e?.message || "");
 
 // ===================== 3. AUTENTICAÇÃO =====================
 const ERROS = {
@@ -253,23 +268,88 @@ async function fotoParaDataUrl(file) {
   }
   throw new Error("Não foi possível reduzir a foto o suficiente. Tente outra imagem.");
 }
-// Entrega + foto são gravadas juntas (lote atômico): ou ficam as duas, ou nenhuma.
-async function salvarEntrega(perfil, dados, arquivo) {
-  exigir();
-  const photoData = await fotoParaDataUrl(arquivo), r = F.doc(colEntregas()), b = F.writeBatch(db);
-  b.set(r, {userId: perfil.uid, employeeNameSnapshot: perfil.nome, employeeEmailSnapshot: perfil.email, companySnapshot: perfil.empresa,
+// Entrega + foto são gravadas juntas (lote atômico): ou ficam as duas, ou nenhuma. O id é gerado antes, para a fila offline não duplicar.
+const novoId = () => F.doc(colEntregas()).id;
+async function gravarEntrega(id, p, dados, photoData) {
+  exigir(); const b = F.writeBatch(db);
+  b.set(F.doc(db, "deliveries", id), {userId: p.uid, employeeNameSnapshot: p.nome, employeeEmailSnapshot: p.email, companySnapshot: p.empresa,
     ...dados, hasPhoto: true, photoContentType: "image/jpeg", createdAt: F.serverTimestamp()});
-  b.set(F.doc(db, "photos", r.id), {userId: perfil.uid, photoData, createdAt: F.serverTimestamp()});
-  await comTempo(b.commit(), 30000, "Tempo esgotado: a entrega NÃO foi confirmada na nuvem. Confira a agenda antes de repetir, para não duplicar.");
-  fotos.set(r.id, Promise.resolve(photoData));
-  return r.id;
+  b.set(F.doc(db, "photos", id), {userId: p.uid, photoData, createdAt: F.serverTimestamp()});
+  await comTempo(b.commit(), 20000, "Tempo esgotado: o registro NÃO foi confirmado na nuvem.");
+  fotos.set(id, Promise.resolve(photoData));
 }
 async function excluirEntrega(d) {
-  exigir(); const b = F.writeBatch(db);
+  exigir(); if (!navigator.onLine) throw new Error("Sem internet: a exclusão só pode ser feita com conexão.");
+  const b = F.writeBatch(db);
   b.delete(F.doc(db, "deliveries", d.id)); b.delete(F.doc(db, "photos", d.id));
   await comTempo(b.commit(), 30000, "Tempo esgotado: a exclusão NÃO foi confirmada.");
   fotos.delete(d.id); return {};
 }
+
+// ===================== 4B. MODO OFFLINE (fila local em IndexedDB) =====================
+// Registros feitos sem internet ficam guardados NO APARELHO (loja "pend") e são enviados sozinhos quando a conexão volta.
+// A loja "cache" guarda uma cópia do perfil e da lista do usuário, para abrir o app sem internet.
+const idb = (() => {
+  let aberto;
+  const abrir = () => aberto = aberto || new Promise((ok, er) => {
+    const r = indexedDB.open("entrega-facil", 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore("pend", {keyPath: "id"}); r.result.createObjectStore("cache", {keyPath: "k"}); };
+    r.onsuccess = () => ok(r.result); r.onerror = () => er(r.error || new Error("IndexedDB indisponível"));
+  });
+  const tx = async (loja, modo, fn) => { const d = await abrir(); return new Promise((ok, er) => { const t = d.transaction(loja, modo), r = fn(t.objectStore(loja)); t.oncomplete = () => ok(r && r.result); t.onerror = t.onabort = () => er(t.error); }); };
+  return {put: (l, v) => tx(l, "readwrite", s => s.put(v)), del: (l, k) => tx(l, "readwrite", s => s.delete(k)), get: (l, k) => tx(l, "readonly", s => s.get(k)), todos: l => tx(l, "readonly", s => s.getAll())};
+})();
+const pendentesDe = async uid => { try { return (await idb.todos("pend")).filter(p => p.perfil.uid === uid); } catch { return []; } };
+const itemParaLista = p => ({id: p.id, userId: p.perfil.uid, employeeNameSnapshot: p.perfil.nome, employeeEmailSnapshot: p.perfil.email, companySnapshot: p.perfil.empresa, ...p.dados, hasPhoto: true, pendente: true});
+// Timestamps do Firestore não sobrevivem ao JSON: guardam-se como milissegundos e voltam com toDate().
+const paraJson = v => JSON.stringify(v, function (k, x) { const o = this[k]; return o && typeof o.toDate === "function" ? {__ts: o.toDate().getTime()} : x; });
+const deJson = t => JSON.parse(t, (k, x) => x && x.__ts !== undefined ? {toDate: () => new Date(x.__ts)} : x);
+let dadosLocais = false, sincronizando = false;
+
+async function carregarLista(p) {                  // servidor; se não houver conexão, a cópia local; sempre soma os pendentes
+  let srv; dadosLocais = false;
+  try {
+    if (!navigator.onLine) throw Object.assign(new Error("offline"), {rede: true});
+    srv = await comTempo(listarMinhas(p.uid), 15000, "Tempo esgotado ao carregar os registros.");
+    idb.put("cache", {k: "lista:" + p.uid, v: paraJson(srv)}).catch(() => {});
+  } catch (e) {
+    if (!ehRede(e)) throw e;
+    const c = await idb.get("cache", "lista:" + p.uid).catch(() => null); srv = c ? deJson(c.v) : []; dadosLocais = true;
+  }
+  const pend = await pendentesDe(p.uid); pend.forEach(x => fotos.set(x.id, Promise.resolve(x.photoData)));
+  return [...srv.filter(d => !pend.some(x => x.id === d.id)), ...pend.map(itemParaLista)];
+}
+function atualizarRede() {
+  const el = $("#net"), n = lista.filter(d => d.pendente).length, on = navigator.onLine;
+  if (on && !n && !dadosLocais) { el.hidden = true; return; }
+  el.className = on ? "" : "off"; el.hidden = false;
+  el.innerHTML = !on ? `<span>📴 Sem internet${n ? ` — ${n} registro(s) guardado(s) no aparelho` : ". Novos registros ficam guardados no aparelho."}</span>`
+    : `<span>${sincronizando ? "⏳ Enviando…" : n ? `⏳ ${n} registro(s) aguardando envio` : "⚠️ Mostrando dados salvos no aparelho"}</span><button id="net-env">${n ? "Enviar agora" : "Atualizar"}</button>`;
+  const b = el.querySelector("#net-env"); if (b) b.onclick = async () => { await sincronizar(); if (dadosLocais) recarregar().catch(() => {}); };
+}
+async function enviarPendente(p) {
+  try { await gravarEntrega(p.id, p.perfil, p.dados, p.photoData); }
+  catch (e) {   // se o envio anterior já tinha chegado ao servidor, regravar é "atualização" (negada pelas regras): confirma e considera enviado
+    if (e?.code === "permission-denied") { const s = await F.getDoc(F.doc(db, "deliveries", p.id)).catch(() => null); if (s?.exists() && s.data().userId === p.perfil.uid) return; }
+    throw e;
+  }
+}
+async function sincronizar() {
+  if (sincronizando || !perfil || !auth?.currentUser || !navigator.onLine) return;
+  sincronizando = true; atualizarRede(); let enviados = 0, erros = 0;
+  try {
+    for (const p of (await pendentesDe(perfil.uid)).sort((a, b) => a.queuedAt - b.queuedAt)) {
+      try { await enviarPendente(p); await idb.del("pend", p.id); enviados++; }
+      catch (e) { if (ehRede(e)) break; erros++; toast("Não foi possível enviar um registro guardado: " + msgErro(e), "err"); }
+    }
+  } finally { sincronizando = false; }
+  if (enviados) { toast(`${enviados} registro(s) guardado(s) no aparelho foram enviados para a nuvem.`); try { await recarregar(); } catch {} }
+  else atualizarRede();
+}
+addEventListener("online", () => { atualizarRede(); sincronizar(); });
+addEventListener("offline", atualizarRede);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) sincronizar(); });
+setInterval(() => { if (lista.some(d => d.pendente)) sincronizar(); }, 60000);
 
 // ===================== 5. COMPARTILHAMENTO =====================
 
@@ -277,12 +357,12 @@ const coordOk = d => Number.isFinite(d.latitude) && Number.isFinite(d.longitude)
 const linkMapa = d => coordOk(d) ? `https://www.google.com/maps?q=${d.latitude},${d.longitude}` : null;
 
 function textoEntrega(d, cabecalho = true) {
-  const e = d.deliveryType === "special", L = [];
-  if (cabecalho) L.push("COMPROVANTE DE ENTREGA", "");
+  const e = d.deliveryType === "special", c = d.deliveryType === "pickup", L = [];
+  if (cabecalho) L.push(c ? "COMPROVANTE DE COLETA" : "COMPROVANTE DE ENTREGA", "");
   if (e) L.push("*ENTREGA ESPECIAL — REGISTRO RETROATIVO*");
-  L.push(`Entrega: ${d.deliveryName}`, `Tipo: ${e ? "Entrega Especial" : "Entrega Padrão"}`, `Entregador: ${d.employeeNameSnapshot}`, `Empresa: ${d.companySnapshot}`,
+  L.push(`${c ? "Coleta" : "Entrega"}: ${d.deliveryName}`, `Tipo: ${e ? "Entrega Especial" : c ? "Coleta" : "Entrega Padrão"}`, `Entregador: ${d.employeeNameSnapshot}`, `Empresa: ${d.companySnapshot}`,
     `Data${e ? " informada" : ""}: ${fmtData(d.deliveryDate)}`, `Horário${e ? " informado" : ""}: ${d.deliveryTime}`);
-  if (e) L.push(`Registro criado em: ${fmtCriado(d)}`);
+  if (e || d.registradoOffline) L.push(`Registro criado em: ${fmtCriado(d)}`);
   if (d.notes) L.push(`Obs.: ${d.notes}`);
   if (coordOk(d)) L.push(`${e ? "Localização no momento do registro" : "Localização"}: ${d.latitude}, ${d.longitude}${d.accuracyMeters ? ` (precisão ~${d.accuracyMeters} m)` : ""}`, `Google Maps: ${linkMapa(d)}`);
   else L.push("Localização: não registrada");
@@ -305,7 +385,7 @@ async function enviar(texto, docs) {
 }
 const compartilharEntrega = d => enviar(textoEntrega(d), [d]);
 function compartilharDia(lista, data, nome) {
-  const cab = `RELATÓRIO DE ENTREGAS — ${fmtData(data)}\nEntregador: ${nome}\nTotal: ${lista.length}\n`;
+  const cab = `RELATÓRIO DE ENTREGAS E COLETAS — ${fmtData(data)}\nEntregador: ${nome}\nTotal: ${lista.length}\n`;
   const corpo = lista.map((d, i) => `\n--- ${i + 1} ---\n${textoEntrega(d, false)}`).join("\n");
   return enviar(cab + corpo, lista);
 }
@@ -316,10 +396,11 @@ const ordenar = (a, b) => (b.deliveryDate + b.deliveryTime).localeCompare(a.deli
 const porHora = (a, b) => (a.deliveryDate + a.deliveryTime).localeCompare(b.deliveryDate + b.deliveryTime);
 
 function cartao(d) {
-  const e = d.deliveryType === "special";
-  return `<article class="card${e ? " esp" : ""}" data-id="${esc(d.id)}"><img class="th" data-i="${esc(d.id)}" alt="">
+  const e = d.deliveryType === "special", c = d.deliveryType === "pickup";
+  return `<article class="card${e ? " esp" : c ? " col" : ""}" data-id="${esc(d.id)}"><img class="th" data-i="${esc(d.id)}" alt="">
   <div class="inf"><b>${esc(d.deliveryName)}</b>${fmtData(d.deliveryDate)} às ${esc(d.deliveryTime)} ${coordOk(d) ? "📍" : ""}<br>
-  ${e ? `<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span><br><span class="mut peq">Registrado em ${esc(fmtCriado(d))}</span>` : '<span class="tag">Entrega Padrão</span>'}
+  ${e ? `<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span><br><span class="mut peq">Registrado em ${esc(fmtCriado(d))}</span>` : c ? '<span class="tag col">Coleta</span>' : '<span class="tag">Entrega Padrão</span>'}
+  ${d.pendente ? '<br><span class="selo" style="background:#b45309;color:#fff">⏳ AGUARDANDO ENVIO</span>' : ""}
   ${d.employeeNameSnapshot ? `<br><span class="mut peq">${esc(d.employeeNameSnapshot)}</span>` : ""}</div>
   <div class="acts"><button data-a="ver">Detalhes</button><button data-a="sh">📤 Compartilhar</button><button data-a="del" class="x" aria-label="Excluir">🗑</button></div></article>`;
 }
@@ -329,6 +410,10 @@ function miniaturas(root) {
 
 async function excluir(d, lista, depois) {
   if (!await confirmar("Deseja realmente excluir esta entrega? Essa ação não poderá ser desfeita.", "Excluir entrega")) return;
+  if (d.pendente) {   // ainda só existe no aparelho
+    try { await idb.del("pend", d.id); } catch {}
+    fotos.delete(d.id); lista.splice(lista.findIndex(x => x.id === d.id), 1); toast("Registro removido do aparelho (ele nunca tinha sido enviado à nuvem)."); atualizarRede(); depois(); return;
+  }
   try {
     const r = await excluirEntrega(d);
     lista.splice(lista.findIndex(x => x.id === d.id), 1);
@@ -338,14 +423,15 @@ async function excluir(d, lista, depois) {
 }
 
 function detalhes(d, lista, depois) {
-  const e = d.deliveryType === "special", reg = d.locationKind === "registro", mapa = linkMapa(d);
-  const s = abrirModal(`${e ? '<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span>' : '<span class="tag">Entrega Padrão</span>'}
+  const e = d.deliveryType === "special", c = d.deliveryType === "pickup", reg = d.locationKind === "registro", mapa = linkMapa(d);
+  const s = abrirModal(`${e ? '<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span>' : c ? '<span class="tag col">Coleta</span>' : '<span class="tag">Entrega Padrão</span>'}
   <h2>${esc(d.deliveryName)}</h2><img class="foto" data-i="${esc(d.id)}" alt="Fotografia da entrega">
+  ${d.pendente ? '<p class="aviso">⏳ Este registro está guardado só neste aparelho e ainda não foi enviado à nuvem.</p>' : ""}
   <dl><dt>Entregador</dt><dd>${esc(d.employeeNameSnapshot)}</dd><dt>Empresa</dt><dd>${esc(d.companySnapshot)}</dd>
   <dt>Data e horário ${e ? "informados" : ""}</dt><dd>${fmtData(d.deliveryDate)} às ${esc(d.deliveryTime)}</dd>
   <dt>Instante real do registro</dt><dd>${esc(fmtCriado(d))}</dd>
   ${d.notes ? `<dt>Observações</dt><dd>${esc(d.notes)}</dd>` : ""}
-  <dt>${reg ? "Localização no momento do registro" : "Localização da entrega"}</dt>
+  <dt>${reg ? "Localização no momento do registro" : c ? "Localização da coleta" : "Localização da entrega"}</dt>
   <dd>${coordOk(d) ? `${d.latitude}, ${d.longitude}${d.accuracyMeters ? ` (precisão ~${d.accuracyMeters} m)` : ""}` : "Não registrada"}</dd></dl>
   ${reg ? '<p class="aviso">Esta localização corresponde ao momento em que o registro foi criado e não comprova o local da entrega ocorrida antes.</p>' : ""}
   ${mapa ? `<a class="btn" href="${mapa}" target="_blank" rel="noopener">🗺 Ver no Google Maps</a>` : ""}
@@ -377,7 +463,7 @@ function montarAgenda(root, lista, o = {}) {
     const doDia = lista.filter(d => d.deliveryDate === st.sel).sort(porHora);
     root.innerHTML = `<div class="cal"><div class="calh"><button data-mes="-1" aria-label="Mês anterior">‹</button><b>${MESES[st.m]} ${st.y}</b><button data-mes="1" aria-label="Próximo mês">›</button></div>
     <div class="sem">${[..."DSTQQSS"].map(x => `<span>${x}</span>`).join("")}</div><div class="grade">${cel}</div></div>
-    <p class="resdia"><b>${fmtData(st.sel)}</b> — ${doDia.length} entrega(s)</p>
+    <p class="resdia"><b>${fmtData(st.sel)}</b> — ${doDia.length} registro(s)</p>
     <div class="row">${o.onNova ? '<button class="btn pri" data-nova>＋ Nova entrega</button>' : ""}${doDia.length ? '<button class="btn vd" data-rel>📤 Relatório do dia</button>' : ""}</div>
     ${doDia.map(cartao).join("") || '<p class="vazio">Nenhuma entrega neste dia.</p>'}`;
     miniaturas(root);
@@ -400,10 +486,10 @@ function montarResumo(root, lista) {
     const [y, m] = mes.split("-").map(Number), n = new Date(y, m, 0).getDate(), dec = (y === hj.getFullYear() && m === hj.getMonth() + 1) ? hj.getDate() : n;
     const por = Array.from({length: n}, (_, i) => noMes.filter(d => d.deliveryDate === `${mes}-${p2(i + 1)}`).length), max = Math.max(1, ...por);
     root.innerHTML = `<h2>Resumo</h2><label>Dia<input type="date" id="r-d" value="${dia}"></label><label>Mês<input type="month" id="r-m" value="${mes}"></label>
-    <div class="kpis"><div class="kpi"><b>${noDia.length}</b>Entregas no dia</div><div class="kpi"><b>${noMes.length}</b>Entregas no mês</div>
-    <div class="kpi"><b>${noDia.filter(d => d.deliveryType === "standard").length}</b>Padrão (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "special").length}</b>Especiais (dia)</div>
+    <div class="kpis"><div class="kpi"><b>${noDia.length}</b>Registros no dia</div><div class="kpi"><b>${noMes.length}</b>Registros no mês</div>
+    <div class="kpi"><b>${noDia.filter(d => d.deliveryType === "standard").length}</b>Padrão (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "special").length}</b>Especiais (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "pickup").length}</b>Coletas (dia)</div>
     <div class="kpi"><b>${(noMes.length / dec).toFixed(1).replace(".", ",")}</b>Média diária (mês)</div></div>
-    <p class="mut peq">Entregas por dia — ${MESES[m - 1]} ${y}</p><div class="graf">${por.map((v, i) => `<i style="height:${v / max * 100}%" title="Dia ${i + 1}: ${v}"></i>`).join("")}</div>`;
+    <p class="mut peq">Registros por dia — ${MESES[m - 1]} ${y}</p><div class="graf">${por.map((v, i) => `<i style="height:${v / max * 100}%" title="Dia ${i + 1}: ${v}"></i>`).join("")}</div>`;
     root.querySelector("#r-d").onchange = e => { if (e.target.value) { dia = e.target.value; mes = dia.slice(0, 7); draw(); } };
     root.querySelector("#r-m").onchange = e => { if (e.target.value) { mes = e.target.value; draw(); } };
   };
@@ -424,13 +510,13 @@ const posicao = () => new Promise((ok, er) => {
 function abrirNova(perfil, lista, aoSalvar, dataSel) {
   let tipo = "standard", arquivo = null, obs = "", dataOc = dataSel || isoData(new Date()), hora = "08:00", msg = "";
   const s = abrirModal("");
-  const nomePadrao = () => tipo === "special" ? "Entrega Especial" : `Entrega ${lista.filter(d => d.deliveryType === "standard" && d.deliveryDate === isoData(new Date())).length + 1}`;
+  const nomePadrao = () => tipo === "special" ? "Entrega Especial" : `${tipo === "pickup" ? "Coleta" : "Entrega"} ${lista.filter(d => d.deliveryType === tipo && d.deliveryDate === isoData(new Date())).length + 1}`;
   let nome = nomePadrao();
   const draw = () => {
-    const e = tipo === "special";
-    s.innerHTML = `<div class="tabs"><button data-t="standard" class="${e ? "" : "on"}">Entrega Padrão</button><button data-t="special" class="${e ? "on e" : ""}">Entrega Especial</button></div>
-    ${e ? '<p class="aviso"><b>ENTREGA ESPECIAL — REGISTRO RETROATIVO.</b> Para entregas já realizadas e não registradas na hora. Data e horário abaixo são informados por você; o instante real do registro é guardado separadamente.</p>' : '<p class="aviso az">Data, horário e localização serão capturados automaticamente ao salvar.</p>'}
-    <label>Nome da entrega<input id="n-nome" value="${esc(nome)}"></label>
+    const e = tipo === "special", c = tipo === "pickup";
+    s.innerHTML = `<div class="tabs t3"><button data-t="standard" class="${tipo === "standard" ? "on" : ""}">Entrega Padrão</button><button data-t="pickup" class="${c ? "on c" : ""}">Coleta</button><button data-t="special" class="${e ? "on e" : ""}">Entrega Especial</button></div>
+    ${e ? '<p class="aviso"><b>ENTREGA ESPECIAL — REGISTRO RETROATIVO.</b> Para entregas já realizadas e não registradas na hora. Data e horário abaixo são informados por você; o instante real do registro é guardado separadamente.</p>' : c ? '<p class="aviso ro"><b>COLETA.</b> Data, horário e localização serão capturados automaticamente ao salvar.</p>' : '<p class="aviso az">Data, horário e localização serão capturados automaticamente ao salvar.</p>'}
+    <label>Nome ${c ? "da coleta" : "da entrega"}<input id="n-nome" value="${esc(nome)}"></label>
     ${e ? `<label>Data da ocorrência<input type="date" id="n-data" value="${dataOc}"></label><label>Horário<input type="time" id="n-hora" value="${hora}"></label>
     <label>Observações (opcional)<textarea id="n-obs" rows="2">${esc(obs)}</textarea></label>` : ""}
     <label class="btn" for="f-cam">📷 ${arquivo ? "Tirar outra fotografia" : "Tirar fotografia"}</label>
@@ -438,7 +524,7 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
     ${e ? '<label class="btn" for="f-gal">🖼 Escolher da galeria</label><input type="file" id="f-gal" accept="image/*" hidden>' : ""}
     ${arquivo ? '<img class="prev" id="prev" alt="Prévia">' : '<p class="mut peq">A fotografia é obrigatória.</p>'}
     <p class="err" id="n-err">${esc(msg)}</p>
-    <button class="btn pri" id="n-salvar">Salvar entrega</button><button class="btn" id="n-cancel">Cancelar</button>`;
+    <button class="btn pri" id="n-salvar">Salvar ${c ? "coleta" : "entrega"}</button><button class="btn" id="n-cancel">Cancelar</button>`;
     if (arquivo) s.querySelector("#prev").src = URL.createObjectURL(arquivo);
     s.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { const antigo = nomePadrao(); guardar(); const trocou = nome === antigo; tipo = b.dataset.t; if (trocou) nome = nomePadrao(); msg = ""; draw(); });
     s.querySelectorAll("input[type=file]").forEach(i => i.onchange = () => { guardar(); if (i.files[0]) { arquivo = i.files[0]; msg = ""; draw(); } });
@@ -447,12 +533,11 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
   };
   function guardar() { nome = s.querySelector("#n-nome").value; if (tipo === "special") { dataOc = s.querySelector("#n-data").value; hora = s.querySelector("#n-hora").value; obs = s.querySelector("#n-obs").value; } }
   async function salvar() {
-    guardar(); const e = tipo === "special", btn = s.querySelector("#n-salvar"), er = s.querySelector("#n-err");
-    const falha = m => { msg = m; er.textContent = m; btn.disabled = false; btn.textContent = "Salvar entrega"; };
+    guardar(); const e = tipo === "special", c = tipo === "pickup", btn = s.querySelector("#n-salvar"), er = s.querySelector("#n-err");
+    const falha = m => { msg = m; er.textContent = m; btn.disabled = false; btn.textContent = "Salvar " + (c ? "coleta" : "entrega"); };
     if (!nome.trim()) return falha("Informe o nome da entrega.");
     if (!arquivo) return falha("A fotografia é obrigatória.");
     if (e && (!dataOc || !hora)) return falha("Informe a data e o horário da ocorrência.");
-    if (!navigator.onLine) return falha("Sem conexão com a internet. A entrega NÃO foi confirmada na nuvem.");
     btn.disabled = true; btn.textContent = "Obtendo localização e salvando…"; er.textContent = "";
     try {
       let loc = null;
@@ -461,10 +546,18 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
       const dados = {deliveryName: nome.trim(), deliveryType: tipo, deviceCreatedAt: agora, notes: e ? obs.trim() : "",
         deliveryDate: e ? dataOc : isoData(agora), deliveryTime: e ? hora : horaHM(agora), occurredAt: e ? new Date(`${dataOc}T${hora}`) : agora,
         latitude: loc?.latitude ?? null, longitude: loc?.longitude ?? null, accuracyMeters: loc?.accuracyMeters ?? null, locationKind: loc ? (e ? "registro" : "entrega") : null};
-      await salvarEntrega(perfil, dados, arquivo);
+      const photoData = await fotoParaDataUrl(arquivo), id = novoId();
+      const snap = {uid: perfil.uid, nome: perfil.nome, email: perfil.email, empresa: perfil.empresa};
+      let local = !navigator.onLine;                // sem internet: vai direto para a fila do aparelho
+      if (!local) { try { await gravarEntrega(id, snap, dados, photoData); } catch (x) { if (!ehRede(x)) throw x; local = true; } }
+      if (local) {
+        try { await idb.put("pend", {id, queuedAt: Date.now(), perfil: snap, dados: {...dados, registradoOffline: true}, photoData}); }
+        catch { throw new Error("Sem internet e não foi possível guardar no aparelho (armazenamento indisponível)."); }
+      }
       fecharModal(); await aoSalvar();
+      if (local) { toast((e ? "Entrega especial" : c ? "Coleta" : "Entrega") + " guardada NO APARELHO (sem internet). Ainda NÃO está na nuvem: será enviada sozinha quando a conexão voltar.", "warn"); return; }
       toast(e ? "Entrega especial registrada com sucesso! Os dados informados foram salvos." + (loc ? " A localização do momento do registro também." : "")
-        : "Entrega registrada com sucesso! Fotografia, data, horário e localização foram registrados.");
+        : c ? "Coleta registrada com sucesso! Fotografia, data, horário e localização foram registrados." : "Entrega registrada com sucesso! Fotografia, data, horário e localização foram registrados.");
     } catch (x) { falha(msgErro(x) + " A entrega NÃO foi confirmada. Você pode tentar novamente."); }
   }
   draw();
@@ -479,6 +572,8 @@ function montarAjustes(root) {                     // não faz nenhuma consulta 
   root.querySelector("#aj-sair").onclick = sairDaConta;
 }
 async function sairDaConta() {
+  const n = lista.filter(d => d.pendente).length;
+  if (n && !await confirmar(`Há ${n} registro(s) guardado(s) só neste aparelho, ainda não enviados à nuvem. Eles continuam guardados e serão enviados quando você entrar de novo com esta conta. Sair mesmo assim?`, "Sair")) return;
   try { await encerrarAdmin(); } catch {}
   try { await sair(); } catch (e) { toast(msgErro(e), "err"); }
 }
@@ -512,7 +607,7 @@ function abrirPainel(root) {
       base("<h2>Funcionários</h2>" + (us.map(u => `<div class="box"><b>${esc(u.nome)}</b><br>${esc(u.email)}<br><span class="mut">${esc(u.empresa)}</span><br>
         <span data-c="${esc(u.uid)}" class="mut">contando entregas…</span><button class="btn pri" data-u="${esc(u.uid)}">Ver registros</button></div>`).join("") || '<p class="vazio">Nenhum funcionário.</p>'));
       root.onclick = e => { const b = e.target.closest("[data-u]"); if (b) funcionario(us.find(x => x.uid === b.dataset.u)); };
-      us.forEach(u => admContar(u.uid).then(n => { const el = root.querySelector(`[data-c="${u.uid}"]`); if (el && n !== null) el.textContent = `${n} entrega(s)`; })
+      us.forEach(u => admContar(u.uid).then(n => { const el = root.querySelector(`[data-c="${u.uid}"]`); if (el && n !== null) el.textContent = `${n} registro(s)`; })
         .catch(() => { const el = root.querySelector(`[data-c="${u.uid}"]`); if (el) el.textContent = "contagem indisponível"; }));
     } catch (e) { falha(e, () => listaFuncionarios(true)); }
   };
@@ -553,7 +648,7 @@ function desenhar() {
   else if (visao === "res") montarResumo($("#v-res"), lista);
   else montarAjustes($("#v-cfg"));
 }
-async function recarregar() { lista = await listarMinhas(perfil.uid); desenhar(); }
+async function recarregar() { lista = await carregarLista(perfil); desenhar(); atualizarRede(); }
 
 function historico() {
   const r = $("#v-hist"), f = {q: "", tipo: "", de: "", ate: ""};
@@ -563,7 +658,7 @@ function historico() {
     miniaturas($("#h-lst"));
   };
   r.innerHTML = `<h2>Histórico</h2><label>Buscar pelo nome<input id="h-q" type="search"></label>
-  <label>Tipo<select id="h-t"><option value="">Todos</option><option value="standard">Entrega Padrão</option><option value="special">Entrega Especial</option></select></label>
+  <label>Tipo<select id="h-t"><option value="">Todos</option><option value="standard">Entrega Padrão</option><option value="pickup">Coleta</option><option value="special">Entrega Especial</option></select></label>
   <div class="row"><label style="flex:1">De<input type="date" id="h-de"></label><label style="flex:1">Até<input type="date" id="h-ate"></label></div><div id="h-lst"></div>`;
   r.querySelector("#h-q").oninput = e => { f.q = e.target.value; draw(); };
   r.querySelector("#h-t").onchange = e => { f.tipo = e.target.value; draw(); };
@@ -574,10 +669,18 @@ function historico() {
 }
 
 async function iniciar(u) {
-  perfil = await carregarPerfil(u.uid);
-  if (!perfil) { toast("Perfil não encontrado. Fale com o administrador.", "err"); await sair(); return; }
-  $("#quem").textContent = `${perfil.nome} · ${perfil.empresa}`;
-  mostrar("app"); lista = await listarMinhas(u.uid); irPara("agenda");
+  let p, copia = false;
+  try { p = await comTempo(carregarPerfil(u.uid), 12000, "Tempo esgotado ao carregar o perfil."); }
+  catch (e) {   // sem conexão: usa a cópia do perfil guardada neste aparelho (só existe depois de um acesso com internet)
+    if (!ehRede(e)) throw e;
+    const c = await idb.get("cache", "perfil:" + u.uid).catch(() => null);
+    if (!c) throw new Error("Sem conexão e sem dados salvos neste aparelho. Conecte-se à internet no primeiro acesso.");
+    p = JSON.parse(c.v); copia = true;
+  }
+  if (!p) { toast("Perfil não encontrado. Fale com o administrador.", "err"); await sair(); return; }
+  if (!copia) idb.put("cache", {k: "perfil:" + u.uid, v: JSON.stringify({uid: p.uid, nome: p.nome, email: p.email, empresa: p.empresa, role: p.role})}).catch(() => {});
+  perfil = p; $("#quem").textContent = `${perfil.nome} · ${perfil.empresa}`;
+  mostrar("app"); lista = await carregarLista(perfil); irPara("agenda"); atualizarRede(); sincronizar();
 }
 
 

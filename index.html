@@ -62,6 +62,10 @@ dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:8px}dd{margin:0;font-w
 .aviso.ro{background:var(--ro2);border-color:var(--ro)}
 #net{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 14px;font-size:14px;font-weight:600;background:var(--am2);border-bottom:1px solid var(--am)}
 #net.off{background:#fde8e8;border-color:var(--vm)}#net button{min-height:34px;padding:0 12px;border-radius:10px;border:1px solid var(--bd);background:#fff;font-weight:600}
+:root{--vi:#7c3aed;--vi2:#efe7ff}
+.card.dev{border-left-color:var(--vi);background:var(--vi2)}.tag.dev{background:var(--vi);color:#fff}
+.tabs .on.d{background:var(--vi);border-color:var(--vi);color:#fff}.aviso.vi{background:var(--vi2);border-color:var(--vi)}
+.tabs button{line-height:1.15}
 #aviso{position:fixed;left:8px;right:8px;bottom:calc(70px + env(safe-area-inset-bottom,0px));z-index:60;background:#b42318;color:#fff;padding:10px;border-radius:12px;font-size:14px}
 </style></head><body>
 <div id="aviso" hidden role="alert"></div>
@@ -130,11 +134,13 @@ const fmtCriado = d => {
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 let tt;
 function toast(m, tipo = "ok") { const t = $("#toast"); t.textContent = m; t.className = "show " + tipo; clearTimeout(tt); tt = setTimeout(() => t.className = "", 5500); }
-function abrirModal(html) { const m = $("#modal"); m.innerHTML = `<div class="sheet">${html}</div>`; m.hidden = false; return m.firstChild; }
-function fecharModal() { const m = $("#modal"); m.hidden = true; m.innerHTML = ""; }
+let modalAoVoltar = null;                          // o que fazer se o usuário tocar em "voltar" com este modal aberto
+function abrirModal(html) { const m = $("#modal"); m.innerHTML = `<div class="sheet">${html}</div>`; m.hidden = false; modalAoVoltar = null; return m.firstChild; }
+function fecharModal() { const m = $("#modal"); m.hidden = true; m.innerHTML = ""; modalAoVoltar = null; }
 function confirmar(msg, botao) {
   return new Promise(res => {
     const s = abrirModal(`<p>${esc(msg)}</p><div class="row"><button class="btn" data-r="0">Cancelar</button><button class="btn red" data-r="1">${esc(botao)}</button></div>`);
+    modalAoVoltar = () => res(false);
     s.onclick = e => { const b = e.target.closest("[data-r]"); if (b) { fecharModal(); res(b.dataset.r === "1"); } };
   });
 }
@@ -357,13 +363,14 @@ const coordOk = d => Number.isFinite(d.latitude) && Number.isFinite(d.longitude)
 const linkMapa = d => coordOk(d) ? `https://www.google.com/maps?q=${d.latitude},${d.longitude}` : null;
 
 function textoEntrega(d, cabecalho = true) {
-  const e = d.deliveryType === "special", c = d.deliveryType === "pickup", L = [];
-  if (cabecalho) L.push(c ? "COMPROVANTE DE COLETA" : "COMPROVANTE DE ENTREGA", "");
+  const e = d.deliveryType === "special", c = d.deliveryType === "pickup", r = d.deliveryType === "return", L = [];
+  if (cabecalho) L.push(c ? "COMPROVANTE DE COLETA" : r ? "COMPROVANTE DE DEVOLUÇÃO" : "COMPROVANTE DE ENTREGA", "");
   if (e) L.push("*ENTREGA ESPECIAL — REGISTRO RETROATIVO*");
-  L.push(`${c ? "Coleta" : "Entrega"}: ${d.deliveryName}`, `Tipo: ${e ? "Entrega Especial" : c ? "Coleta" : "Entrega Padrão"}`, `Entregador: ${d.employeeNameSnapshot}`, `Empresa: ${d.companySnapshot}`,
+  L.push(`${c ? "Coleta" : r ? "Devolução" : "Entrega"}: ${d.deliveryName}`, `Tipo: ${e ? "Entrega Especial" : c ? "Coleta" : r ? "Devolução" : "Entrega Padrão"}`, `Entregador: ${d.employeeNameSnapshot}`, `Empresa: ${d.companySnapshot}`,
     `Data${e ? " informada" : ""}: ${fmtData(d.deliveryDate)}`, `Horário${e ? " informado" : ""}: ${d.deliveryTime}`);
   if (e || d.registradoOffline) L.push(`Registro criado em: ${fmtCriado(d)}`);
-  if (d.notes) L.push(`Obs.: ${d.notes}`);
+  if (r) L.push(`Vendedor: ${d.vendedor || "—"}`);
+  if (d.notes) L.push(`${r ? "Motivo" : "Obs."}: ${d.notes}`);
   if (coordOk(d)) L.push(`${e ? "Localização no momento do registro" : "Localização"}: ${d.latitude}, ${d.longitude}${d.accuracyMeters ? ` (precisão ~${d.accuracyMeters} m)` : ""}`, `Google Maps: ${linkMapa(d)}`);
   else L.push("Localização: não registrada");
   return L.join("\n");
@@ -385,7 +392,7 @@ async function enviar(texto, docs) {
 }
 const compartilharEntrega = d => enviar(textoEntrega(d), [d]);
 function compartilharDia(lista, data, nome) {
-  const cab = `RELATÓRIO DE ENTREGAS E COLETAS — ${fmtData(data)}\nEntregador: ${nome}\nTotal: ${lista.length}\n`;
+  const cab = `RELATÓRIO DE ENTREGAS, COLETAS E DEVOLUÇÕES — ${fmtData(data)}\nEntregador: ${nome}\nTotal: ${lista.length}\n`;
   const corpo = lista.map((d, i) => `\n--- ${i + 1} ---\n${textoEntrega(d, false)}`).join("\n");
   return enviar(cab + corpo, lista);
 }
@@ -396,10 +403,11 @@ const ordenar = (a, b) => (b.deliveryDate + b.deliveryTime).localeCompare(a.deli
 const porHora = (a, b) => (a.deliveryDate + a.deliveryTime).localeCompare(b.deliveryDate + b.deliveryTime);
 
 function cartao(d) {
-  const e = d.deliveryType === "special", c = d.deliveryType === "pickup";
-  return `<article class="card${e ? " esp" : c ? " col" : ""}" data-id="${esc(d.id)}"><img class="th" data-i="${esc(d.id)}" alt="">
+  const e = d.deliveryType === "special", c = d.deliveryType === "pickup", r = d.deliveryType === "return";
+  return `<article class="card${e ? " esp" : c ? " col" : r ? " dev" : ""}" data-id="${esc(d.id)}"><img class="th" data-i="${esc(d.id)}" alt="">
   <div class="inf"><b>${esc(d.deliveryName)}</b>${fmtData(d.deliveryDate)} às ${esc(d.deliveryTime)} ${coordOk(d) ? "📍" : ""}<br>
-  ${e ? `<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span><br><span class="mut peq">Registrado em ${esc(fmtCriado(d))}</span>` : c ? '<span class="tag col">Coleta</span>' : '<span class="tag">Entrega Padrão</span>'}
+  ${e ? `<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span><br><span class="mut peq">Registrado em ${esc(fmtCriado(d))}</span>` : c ? '<span class="tag col">Coleta</span>' : r ? '<span class="tag dev">Devolução</span>' : '<span class="tag">Entrega Padrão</span>'}
+  ${r && d.vendedor ? `<br><span class="peq"><strong>Vendedor:</strong> ${esc(d.vendedor)}</span>` : ""}
   ${d.pendente ? '<br><span class="selo" style="background:#b45309;color:#fff">⏳ AGUARDANDO ENVIO</span>' : ""}
   ${d.employeeNameSnapshot ? `<br><span class="mut peq">${esc(d.employeeNameSnapshot)}</span>` : ""}</div>
   <div class="acts"><button data-a="ver">Detalhes</button><button data-a="sh">📤 Compartilhar</button><button data-a="del" class="x" aria-label="Excluir">🗑</button></div></article>`;
@@ -423,15 +431,15 @@ async function excluir(d, lista, depois) {
 }
 
 function detalhes(d, lista, depois) {
-  const e = d.deliveryType === "special", c = d.deliveryType === "pickup", reg = d.locationKind === "registro", mapa = linkMapa(d);
-  const s = abrirModal(`${e ? '<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span>' : c ? '<span class="tag col">Coleta</span>' : '<span class="tag">Entrega Padrão</span>'}
+  const e = d.deliveryType === "special", c = d.deliveryType === "pickup", r = d.deliveryType === "return", reg = d.locationKind === "registro", mapa = linkMapa(d);
+  const s = abrirModal(`${e ? '<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span>' : c ? '<span class="tag col">Coleta</span>' : r ? '<span class="tag dev">Devolução</span>' : '<span class="tag">Entrega Padrão</span>'}
   <h2>${esc(d.deliveryName)}</h2><img class="foto" data-i="${esc(d.id)}" alt="Fotografia da entrega">
   ${d.pendente ? '<p class="aviso">⏳ Este registro está guardado só neste aparelho e ainda não foi enviado à nuvem.</p>' : ""}
   <dl><dt>Entregador</dt><dd>${esc(d.employeeNameSnapshot)}</dd><dt>Empresa</dt><dd>${esc(d.companySnapshot)}</dd>
   <dt>Data e horário ${e ? "informados" : ""}</dt><dd>${fmtData(d.deliveryDate)} às ${esc(d.deliveryTime)}</dd>
   <dt>Instante real do registro</dt><dd>${esc(fmtCriado(d))}</dd>
-  ${d.notes ? `<dt>Observações</dt><dd>${esc(d.notes)}</dd>` : ""}
-  <dt>${reg ? "Localização no momento do registro" : c ? "Localização da coleta" : "Localização da entrega"}</dt>
+  ${r ? `<dt>Vendedor</dt><dd>${esc(d.vendedor || "—")}</dd>` : ""}${d.notes ? `<dt>${r ? "Motivo da devolução" : "Observações"}</dt><dd>${esc(d.notes)}</dd>` : ""}
+  <dt>${reg ? "Localização no momento do registro" : c ? "Localização da coleta" : r ? "Localização da devolução" : "Localização da entrega"}</dt>
   <dd>${coordOk(d) ? `${d.latitude}, ${d.longitude}${d.accuracyMeters ? ` (precisão ~${d.accuracyMeters} m)` : ""}` : "Não registrada"}</dd></dl>
   ${reg ? '<p class="aviso">Esta localização corresponde ao momento em que o registro foi criado e não comprova o local da entrega ocorrida antes.</p>' : ""}
   ${mapa ? `<a class="btn" href="${mapa}" target="_blank" rel="noopener">🗺 Ver no Google Maps</a>` : ""}
@@ -487,7 +495,7 @@ function montarResumo(root, lista) {
     const por = Array.from({length: n}, (_, i) => noMes.filter(d => d.deliveryDate === `${mes}-${p2(i + 1)}`).length), max = Math.max(1, ...por);
     root.innerHTML = `<h2>Resumo</h2><label>Dia<input type="date" id="r-d" value="${dia}"></label><label>Mês<input type="month" id="r-m" value="${mes}"></label>
     <div class="kpis"><div class="kpi"><b>${noDia.length}</b>Registros no dia</div><div class="kpi"><b>${noMes.length}</b>Registros no mês</div>
-    <div class="kpi"><b>${noDia.filter(d => d.deliveryType === "standard").length}</b>Padrão (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "special").length}</b>Especiais (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "pickup").length}</b>Coletas (dia)</div>
+    <div class="kpi"><b>${noDia.filter(d => d.deliveryType === "standard").length}</b>Padrão (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "special").length}</b>Especiais (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "pickup").length}</b>Coletas (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "return").length}</b>Devoluções (dia)</div>
     <div class="kpi"><b>${(noMes.length / dec).toFixed(1).replace(".", ",")}</b>Média diária (mês)</div></div>
     <p class="mut peq">Registros por dia — ${MESES[m - 1]} ${y}</p><div class="graf">${por.map((v, i) => `<i style="height:${v / max * 100}%" title="Dia ${i + 1}: ${v}"></i>`).join("")}</div>`;
     root.querySelector("#r-d").onchange = e => { if (e.target.value) { dia = e.target.value; mes = dia.slice(0, 7); draw(); } };
@@ -508,34 +516,46 @@ const posicao = () => new Promise((ok, er) => {
 });
 
 function abrirNova(perfil, lista, aoSalvar, dataSel) {
-  let tipo = "standard", arquivo = null, obs = "", dataOc = dataSel || isoData(new Date()), hora = "08:00", msg = "";
+  let tipo = "standard", arquivo = null, obs = "", vend = "", dataOc = dataSel || isoData(new Date()), hora = "08:00", msg = "";
   const s = abrirModal("");
-  const nomePadrao = () => tipo === "special" ? "Entrega Especial" : `${tipo === "pickup" ? "Coleta" : "Entrega"} ${lista.filter(d => d.deliveryType === tipo && d.deliveryDate === isoData(new Date())).length + 1}`;
+  const NOME = {standard: "Entrega", pickup: "Coleta", return: "Devolução"};
+  const nomePadrao = () => tipo === "special" ? "Entrega Especial" : `${NOME[tipo]} ${lista.filter(d => d.deliveryType === tipo && d.deliveryDate === isoData(new Date())).length + 1}`;
   let nome = nomePadrao();
   const draw = () => {
-    const e = tipo === "special", c = tipo === "pickup";
-    s.innerHTML = `<div class="tabs t3"><button data-t="standard" class="${tipo === "standard" ? "on" : ""}">Entrega Padrão</button><button data-t="pickup" class="${c ? "on c" : ""}">Coleta</button><button data-t="special" class="${e ? "on e" : ""}">Entrega Especial</button></div>
-    ${e ? '<p class="aviso"><b>ENTREGA ESPECIAL — REGISTRO RETROATIVO.</b> Para entregas já realizadas e não registradas na hora. Data e horário abaixo são informados por você; o instante real do registro é guardado separadamente.</p>' : c ? '<p class="aviso ro"><b>COLETA.</b> Data, horário e localização serão capturados automaticamente ao salvar.</p>' : '<p class="aviso az">Data, horário e localização serão capturados automaticamente ao salvar.</p>'}
-    <label>Nome ${c ? "da coleta" : "da entrega"}<input id="n-nome" value="${esc(nome)}"></label>
+    const e = tipo === "special", c = tipo === "pickup", r = tipo === "return", alvo = r ? "devolução" : c ? "coleta" : "entrega";
+    s.innerHTML = `<div class="tabs"><button data-t="standard" class="${tipo === "standard" ? "on" : ""}">Entrega Padrão</button><button data-t="pickup" class="${c ? "on c" : ""}">Coleta</button><button data-t="return" class="${r ? "on d" : ""}">Devolução</button><button data-t="special" class="${e ? "on e" : ""}">Entrega Especial</button></div>
+    ${e ? '<p class="aviso"><b>ENTREGA ESPECIAL — REGISTRO RETROATIVO.</b> Para entregas já realizadas e não registradas na hora. Data e horário abaixo são informados por você; o instante real do registro é guardado separadamente.</p>'
+      : c ? '<p class="aviso ro"><b>COLETA.</b> Data, horário e localização serão capturados automaticamente ao salvar.</p>'
+      : r ? '<p class="aviso vi"><b>DEVOLUÇÃO.</b> Fotografe o produto devolvido e informe o vendedor. Data, horário e localização são capturados automaticamente ao salvar.</p>'
+      : '<p class="aviso az">Data, horário e localização serão capturados automaticamente ao salvar.</p>'}
+    <label>Nome ${r ? "da devolução" : c ? "da coleta" : "da entrega"}<input id="n-nome" value="${esc(nome)}"${r ? ' placeholder="Ex.: Devolução Sul Diesel"' : ""}></label>
+    ${r ? `<label>Vendedor (quem vendeu a peça) *<input id="n-vend" value="${esc(vend)}" placeholder="Nome do vendedor" autocomplete="off"></label>
+    <label>Motivo / descrição (o que aconteceu)<textarea id="n-obs" rows="3" placeholder="Ex.: Cliente não quis a peça / peça veio errada">${esc(obs)}</textarea></label>` : ""}
     ${e ? `<label>Data da ocorrência<input type="date" id="n-data" value="${dataOc}"></label><label>Horário<input type="time" id="n-hora" value="${hora}"></label>
     <label>Observações (opcional)<textarea id="n-obs" rows="2">${esc(obs)}</textarea></label>` : ""}
-    <label class="btn" for="f-cam">📷 ${arquivo ? "Tirar outra fotografia" : "Tirar fotografia"}</label>
+    <label class="btn" for="f-cam">📷 ${arquivo ? "Tirar outra fotografia" : r ? "Fotografar o produto devolvido" : "Tirar fotografia"}</label>
     <input type="file" id="f-cam" accept="image/*" capture="environment" hidden>
     ${e ? '<label class="btn" for="f-gal">🖼 Escolher da galeria</label><input type="file" id="f-gal" accept="image/*" hidden>' : ""}
     ${arquivo ? '<img class="prev" id="prev" alt="Prévia">' : '<p class="mut peq">A fotografia é obrigatória.</p>'}
     <p class="err" id="n-err">${esc(msg)}</p>
-    <button class="btn pri" id="n-salvar">Salvar ${c ? "coleta" : "entrega"}</button><button class="btn" id="n-cancel">Cancelar</button>`;
+    <button class="btn pri" id="n-salvar">Salvar ${alvo}</button><button class="btn" id="n-cancel">Cancelar</button>`;
     if (arquivo) s.querySelector("#prev").src = URL.createObjectURL(arquivo);
     s.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { const antigo = nomePadrao(); guardar(); const trocou = nome === antigo; tipo = b.dataset.t; if (trocou) nome = nomePadrao(); msg = ""; draw(); });
     s.querySelectorAll("input[type=file]").forEach(i => i.onchange = () => { guardar(); if (i.files[0]) { arquivo = i.files[0]; msg = ""; draw(); } });
     s.querySelector("#n-cancel").onclick = fecharModal;
     s.querySelector("#n-salvar").onclick = salvar;
   };
-  function guardar() { nome = s.querySelector("#n-nome").value; if (tipo === "special") { dataOc = s.querySelector("#n-data").value; hora = s.querySelector("#n-hora").value; obs = s.querySelector("#n-obs").value; } }
+  function guardar() {
+    nome = s.querySelector("#n-nome").value;
+    if (tipo === "special") { dataOc = s.querySelector("#n-data").value; hora = s.querySelector("#n-hora").value; obs = s.querySelector("#n-obs").value; }
+    if (tipo === "return") { vend = s.querySelector("#n-vend").value; obs = s.querySelector("#n-obs").value; }
+  }
   async function salvar() {
-    guardar(); const e = tipo === "special", c = tipo === "pickup", btn = s.querySelector("#n-salvar"), er = s.querySelector("#n-err");
-    const falha = m => { msg = m; er.textContent = m; btn.disabled = false; btn.textContent = "Salvar " + (c ? "coleta" : "entrega"); };
-    if (!nome.trim()) return falha("Informe o nome da entrega.");
+    guardar(); const e = tipo === "special", c = tipo === "pickup", r = tipo === "return", alvo = r ? "devolução" : c ? "coleta" : "entrega";
+    const btn = s.querySelector("#n-salvar"), er = s.querySelector("#n-err");
+    const falha = m => { msg = m; er.textContent = m; btn.disabled = false; btn.textContent = "Salvar " + alvo; };
+    if (!nome.trim()) return falha(`Informe o nome da ${alvo}.`);
+    if (r && !vend.trim()) return falha("Informe o nome do vendedor.");
     if (!arquivo) return falha("A fotografia é obrigatória.");
     if (e && (!dataOc || !hora)) return falha("Informe a data e o horário da ocorrência.");
     btn.disabled = true; btn.textContent = "Obtendo localização e salvando…"; er.textContent = "";
@@ -543,7 +563,7 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
       let loc = null;
       try { loc = await posicao(); } catch (x) { if (!e) throw x; toast(x.message + " O registro especial será salvo sem localização.", "warn"); }
       const agora = new Date();
-      const dados = {deliveryName: nome.trim(), deliveryType: tipo, deviceCreatedAt: agora, notes: e ? obs.trim() : "",
+      const dados = {deliveryName: nome.trim(), deliveryType: tipo, deviceCreatedAt: agora, notes: (e || r) ? obs.trim() : "", ...(r ? {vendedor: vend.trim()} : {}),
         deliveryDate: e ? dataOc : isoData(agora), deliveryTime: e ? hora : horaHM(agora), occurredAt: e ? new Date(`${dataOc}T${hora}`) : agora,
         latitude: loc?.latitude ?? null, longitude: loc?.longitude ?? null, accuracyMeters: loc?.accuracyMeters ?? null, locationKind: loc ? (e ? "registro" : "entrega") : null};
       const photoData = await fotoParaDataUrl(arquivo), id = novoId();
@@ -555,17 +575,18 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
         catch { throw new Error("Sem internet e não foi possível guardar no aparelho (armazenamento indisponível)."); }
       }
       fecharModal(); await aoSalvar();
-      if (local) { toast((e ? "Entrega especial" : c ? "Coleta" : "Entrega") + " guardada NO APARELHO (sem internet). Ainda NÃO está na nuvem: será enviada sozinha quando a conexão voltar.", "warn"); return; }
+      const rot = e ? "Entrega especial" : c ? "Coleta" : r ? "Devolução" : "Entrega";
+      if (local) { toast(rot + " guardada NO APARELHO (sem internet). Ainda NÃO está na nuvem: será enviada sozinha quando a conexão voltar.", "warn"); return; }
       toast(e ? "Entrega especial registrada com sucesso! Os dados informados foram salvos." + (loc ? " A localização do momento do registro também." : "")
-        : c ? "Coleta registrada com sucesso! Fotografia, data, horário e localização foram registrados." : "Entrega registrada com sucesso! Fotografia, data, horário e localização foram registrados.");
-    } catch (x) { falha(msgErro(x) + " A entrega NÃO foi confirmada. Você pode tentar novamente."); }
+        : `${rot} registrada com sucesso! Fotografia, data, horário e localização foram registrados.`);
+    } catch (x) { falha(msgErro(x) + " O registro NÃO foi confirmado. Você pode tentar novamente."); }
   }
   draw();
 }
 
 // ===================== 8. AJUSTES E ADMINISTRADOR (sob demanda) =====================
 function montarAjustes(root) {                     // não faz nenhuma consulta ao banco
-  root.onclick = null;
+  root.onclick = null; painelVoltar = null;
   root.innerHTML = `<h2>Ajustes</h2><div class="box"><b>${esc(perfil.nome)}</b><br>${esc(perfil.email)}<br><span class="mut">${esc(perfil.empresa)}</span></div>
   <button class="btn" id="aj-adm">🛡 Administrador</button><button class="btn red" id="aj-sair">Sair da conta</button>`;
   root.querySelector("#aj-adm").onclick = () => pedirSenhaAdmin(root);
@@ -590,10 +611,11 @@ function pedirSenhaAdmin(root) {
   s.querySelector("#pin").focus();
 }
 function abrirPainel(root) {
+  const sairPainel = async () => { await encerrarAdmin(); montarAjustes(root); };
   const base = corpo => {
-    root.onclick = null;
+    root.onclick = null; painelVoltar = sairPainel;   // botão voltar do celular: por padrão sai do painel
     root.innerHTML = `<button class="btn red" id="p-sair">🔒 Sair do painel</button>${corpo}`;
-    root.querySelector("#p-sair").onclick = async () => { await encerrarAdmin(); montarAjustes(root); };
+    root.querySelector("#p-sair").onclick = sairPainel;
   };
   const falha = (e, tentar) => {
     if (!adminAtivo()) { toast(msgErro(e), "warn"); montarAjustes(root); return; }
@@ -619,6 +641,7 @@ function abrirPainel(root) {
         <p class="mut peq">${e.lista.length} registro(s) carregado(s)${e.fim ? "" : " — há mais registros"}</p>${e.fim ? "" : '<button class="btn" id="p-mais">Carregar mais registros</button>'}
         <div id="ag"></div><div id="rs"></div><button class="btn" id="p-atual">↻ Atualizar este funcionário</button>`);
       montarAgenda(root.querySelector("#ag"), e.lista, {admin: true}); montarResumo(root.querySelector("#rs"), e.lista);
+      painelVoltar = () => listaFuncionarios(false);   // voltar do celular: do funcionário para a lista
       root.querySelector("#p-lista").onclick = () => listaFuncionarios(false);
       root.querySelector("#p-atual").onclick = () => { admDados.delete(u.uid); admContagens.delete(u.uid); funcionario(u); };
       const m = root.querySelector("#p-mais"); if (m) m.onclick = () => funcionario(u, true);
@@ -635,7 +658,8 @@ const mostrar = id => {
   for (const x of ["auth", "app"]) $("#" + x).hidden = x !== id;
   if (id === "auth") { $("#a-home").hidden = false; $("#f-cad").hidden = true; $("#f-log").hidden = true; }   // sempre volta à tela inicial
 };
-function irPara(v) {
+function irPara(v, voltando) {
+  if (!voltando) { const i = pilhaTabs.indexOf(v); if (i >= 0) pilhaTabs.length = i + 1; else pilhaTabs.push(v); }   // pilha de telas para o botão voltar
   if (visao === "cfg") encerrarAdmin().catch(() => {});   // saiu (ou tocou de novo) em Ajustes: bloqueia o painel
   visao = v;
   document.querySelectorAll(".view").forEach(s => s.hidden = s.id !== "v-" + v);
@@ -653,12 +677,12 @@ async function recarregar() { lista = await carregarLista(perfil); desenhar(); a
 function historico() {
   const r = $("#v-hist"), f = {q: "", tipo: "", de: "", ate: ""};
   const draw = () => {
-    const l = lista.filter(d => (!f.q || d.deliveryName.toLowerCase().includes(f.q.toLowerCase())) && (!f.tipo || d.deliveryType === f.tipo) && (!f.de || d.deliveryDate >= f.de) && (!f.ate || d.deliveryDate <= f.ate)).sort(ordenar);
+    const l = lista.filter(d => (!f.q || (d.deliveryName + " " + (d.vendedor || "")).toLowerCase().includes(f.q.toLowerCase())) && (!f.tipo || d.deliveryType === f.tipo) && (!f.de || d.deliveryDate >= f.de) && (!f.ate || d.deliveryDate <= f.ate)).sort(ordenar);
     $("#h-lst").innerHTML = `<p class="mut peq">${l.length} registro(s), mais recentes primeiro (pela data da ocorrência)</p>` + (l.map(cartao).join("") || '<p class="vazio">Nada encontrado.</p>');
     miniaturas($("#h-lst"));
   };
-  r.innerHTML = `<h2>Histórico</h2><label>Buscar pelo nome<input id="h-q" type="search"></label>
-  <label>Tipo<select id="h-t"><option value="">Todos</option><option value="standard">Entrega Padrão</option><option value="pickup">Coleta</option><option value="special">Entrega Especial</option></select></label>
+  r.innerHTML = `<h2>Histórico</h2><label>Buscar pelo nome ou vendedor<input id="h-q" type="search"></label>
+  <label>Tipo<select id="h-t"><option value="">Todos</option><option value="standard">Entrega Padrão</option><option value="pickup">Coleta</option><option value="return">Devolução</option><option value="special">Entrega Especial</option></select></label>
   <div class="row"><label style="flex:1">De<input type="date" id="h-de"></label><label style="flex:1">Até<input type="date" id="h-ate"></label></div><div id="h-lst"></div>`;
   r.querySelector("#h-q").oninput = e => { f.q = e.target.value; draw(); };
   r.querySelector("#h-t").onchange = e => { f.tipo = e.target.value; draw(); };
@@ -680,7 +704,7 @@ async function iniciar(u) {
   if (!p) { toast("Perfil não encontrado. Fale com o administrador.", "err"); await sair(); return; }
   if (!copia) idb.put("cache", {k: "perfil:" + u.uid, v: JSON.stringify({uid: p.uid, nome: p.nome, email: p.email, empresa: p.empresa, role: p.role})}).catch(() => {});
   perfil = p; $("#quem").textContent = `${perfil.nome} · ${perfil.empresa}`;
-  mostrar("app"); lista = await carregarLista(perfil); irPara("agenda"); atualizarRede(); sincronizar();
+  pilhaTabs = ["agenda"]; mostrar("app"); lista = await carregarLista(perfil); irPara("agenda"); atualizarRede(); sincronizar();
 }
 
 
@@ -706,7 +730,7 @@ document.querySelectorAll(".bar button").forEach(b => b.onclick = () => irPara(b
 
 // ===================== 9. INICIALIZAÇÃO GERAL =====================
 function limparSessaoVisual() {                   // impede reaproveitar visualmente dados da conta anterior
-  perfil = null; lista = []; visao = "agenda"; bloquearAdminLocal(); admSessao = false; fotos.clear(); fecharModal();
+  perfil = null; lista = []; visao = "agenda"; pilhaTabs = ["agenda"]; painelVoltar = null; bloquearAdminLocal(); admSessao = false; fotos.clear(); fecharModal();
   document.querySelectorAll(".view").forEach(v => v.innerHTML = ""); $("#quem").textContent = "";
 }
 const erroAuth = m => { $("#a-err").textContent = m || ""; };
@@ -722,6 +746,34 @@ async function bootstrap() {
     catch (e) { mostrar("auth"); erroAuth("Você está autenticado, mas não foi possível carregar seus dados (" + msgErro(e) + "). Verifique a conexão e as regras do Firestore e tente novamente."); }
   });
 }
+// ===================== BOTÃO VOLTAR DO CELULAR =====================
+// O histórico do navegador mantém sempre uma entrada "base" e uma "armadilha" à frente. Ao tocar em voltar, o navegador cai na base;
+// o app decide o que "voltar" significa (fechar janela, subir um nível, confirmar a saída) e recoloca a armadilha.
+let semArmadilha = false, pilhaTabs = ["agenda"], painelVoltar = null;
+function armarVoltar() {
+  if (history.state?.trap) return;                 // página recarregada: já estamos na armadilha
+  history.replaceState({base: true}, ""); history.pushState({trap: true}, "");
+}
+function voltarApp() {
+  if (!$("#modal").hidden) { const f = modalAoVoltar; fecharModal(); if (f) f(); return; }          // 1) janela aberta: fecha/cancela
+  if (!$("#app").hidden) {
+    if (visao === "cfg" && painelVoltar) { painelVoltar(); return; }                                // 2) dentro do painel admin: sobe um nível
+    if (pilhaTabs.length > 1) { pilhaTabs.pop(); irPara(pilhaTabs[pilhaTabs.length - 1], true); return; }   // 3) telas visitadas, de trás para frente
+    confirmarSaida(); return;                                                                       // 4) página principal: pergunta antes de sair
+  }
+  if (!$("#a-home").hidden) { sairDoApp(true); return; }                                            // login: tela inicial → novo voltar sai
+  $("#a-home").hidden = false; fs.cad.hidden = true; fs.log.hidden = true;                          // login: fecha o formulário
+}
+async function confirmarSaida() { if (await confirmar("Deseja sair do aplicativo?", "Sair")) sairDoApp(true); }
+function sairDoApp(avisar) {                       // o navegador não deixa o site se fechar sozinho: vai para a entrada base; um novo "voltar" sai
+  semArmadilha = true; history.go(-1);
+  setTimeout(() => { try { window.close(); } catch {} }, 300);
+  if (avisar) toast("Toque em voltar mais uma vez para fechar o aplicativo.", "warn");
+  setTimeout(() => { if (semArmadilha) { semArmadilha = false; history.pushState({trap: true}, ""); } }, 5000);   // continuou no app: rearma
+}
+addEventListener("popstate", () => { if (semArmadilha) return; history.pushState({trap: true}, ""); voltarApp(); });
+
+armarVoltar();
 bootstrap();
 
 </script>

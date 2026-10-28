@@ -1,5 +1,5 @@
 // Troque o número da versão sempre que publicar uma atualização importante.
-const V = "entrega-facil-v4";
+const V = "entrega-facil-v5";
 const ARQ = ["./", "index.html", "manifest.json", "icon-192.png"];
 const SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const SDK_ENTRADAS = ["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"];

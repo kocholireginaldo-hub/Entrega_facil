@@ -66,9 +66,10 @@ dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:8px}dd{margin:0;font-w
 .card.dev{border-left-color:var(--vi);background:var(--vi2)}.tag.dev{background:var(--vi);color:#fff}
 .tabs .on.d{background:var(--vi);border-color:var(--vi);color:#fff}.aviso.vi{background:var(--vi2);border-color:var(--vi)}
 .tabs button{line-height:1.15}
-#aviso{position:fixed;left:8px;right:8px;bottom:calc(70px + env(safe-area-inset-bottom,0px));z-index:60;background:#b42318;color:#fff;padding:10px;border-radius:12px;font-size:14px}
+#aviso{position:fixed;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top,0px));z-index:60;background:#b42318;color:#fff;padding:10px 6px 10px 12px;border-radius:12px;font-size:14px;display:flex;gap:8px;align-items:flex-start}
+#aviso[hidden]{display:none}#aviso-t{flex:1}#aviso-x{flex:0 0 44px;min-height:44px;border:0;border-radius:10px;background:rgba(255,255,255,.2);color:#fff;font-size:20px;font-weight:700}
 </style></head><body>
-<div id="aviso" hidden role="alert"></div>
+<div id="aviso" hidden role="alert"><span id="aviso-t"></span><button id="aviso-x" type="button" aria-label="Fechar aviso">✕</button></div>
 <div id="toast" role="status"></div>
 <main id="auth">
  <img src="icon-192.png" class="logo" alt="">
@@ -108,11 +109,14 @@ dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:8px}dd{margin:0;font-w
 
 <script>
 /* Rede de segurança: mostra erros do aplicativo em vez de deixar a tela branca. */
-function avisar(m){var a=document.getElementById("aviso");if(a){a.textContent=m;a.hidden=false;}}
-addEventListener("error",function(e){avisar("Erro no aplicativo: "+(e.message||"falha ao carregar"));});
-addEventListener("unhandledrejection",function(e){var r=e.reason;avisar("Falha: "+((r&&r.message)||"erro inesperado"));});
-/* Service worker opcional: qualquer falha aqui não afeta o app. */
-if("serviceWorker" in navigator)addEventListener("load",function(){try{navigator.serviceWorker.register("service-worker.js",{scope:"./"}).then(function(r){r.update();}).catch(function(){});}catch(e){}});
+function avisar(m){var a=document.getElementById("aviso");if(a){document.getElementById("aviso-t").textContent=m;a.hidden=false;}}
+document.getElementById("aviso-x").onclick=function(){document.getElementById("aviso").hidden=true;};
+/* Falhas de rede e do service worker (comuns sem internet) não são erros do app: não mostram tarja. */
+function ruido(m){return /ServiceWorker|service-worker|Failed to fetch|NetworkError|Load failed|network|offline/i.test(m||"");}
+addEventListener("error",function(e){if(!ruido(e.message))avisar("Erro no aplicativo: "+(e.message||"falha ao carregar"));});
+addEventListener("unhandledrejection",function(e){var r=e.reason,m=(r&&r.message)||"";if(ruido(m)){e.preventDefault();return;}avisar("Falha: "+(m||"erro inesperado"));});
+/* Service worker opcional: qualquer falha aqui (inclusive sem internet) é ignorada e não afeta o app. */
+if("serviceWorker" in navigator)addEventListener("load",function(){try{navigator.serviceWorker.register("service-worker.js",{scope:"./"}).then(function(r){return r.update();}).catch(function(){});}catch(e){}});
 </script>
 <script type="module">
 "use strict";

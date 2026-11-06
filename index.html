@@ -23,9 +23,10 @@ label{display:block;margin:10px 0;font-weight:600;font-size:14px}
 .top{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;background:#fff;border-bottom:1px solid var(--bd)}
 .top h1{font-size:18px;color:var(--az);margin:0}#quem{flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .view{max-width:720px;margin:0 auto;padding:14px 14px calc(100px + var(--sb))}
-.bar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border-top:1px solid var(--bd);padding-bottom:var(--sb)}
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:grid;grid-template-columns:repeat(5,1fr);background:#fff;border-top:1px solid var(--bd);padding-bottom:var(--sb)}
 .bar button{border:0;background:none;min-height:58px;color:var(--mut);font-size:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .bar button span{font-size:22px}.bar button.on{color:var(--az);font-weight:700}
+.bar a{min-height:58px;color:var(--mut);font-size:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-decoration:none}.bar a span{font-size:22px}.bar a:active{color:var(--az)}
 .cal,.box,.card{background:#fff;border:1px solid var(--bd);border-radius:16px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
 .cal{padding:10px}.calh{display:flex;justify-content:space-between;align-items:center}
 .calh button{border:0;background:var(--az2);color:var(--az);width:44px;height:44px;border-radius:12px;font-size:22px}
@@ -101,6 +102,7 @@ dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:8px}dd{margin:0;font-w
  <nav class="bar">
   <button data-v="agenda" class="on"><span>📅</span>Agenda</button>
   <button data-v="hist"><span>🕘</span>Histórico</button>
+  <a id="ir-rotas" href="https://jeanjs250sipriano-blip.github.io/equipecas-rotas/" aria-label="Abrir o aplicativo Equipeças Rotas"><span>🗺️</span>Rotas</a>
   <button data-v="res"><span>📊</span>Resumo</button>
   <button data-v="cfg"><span>⚙️</span>Ajustes</button>
  </nav>
@@ -287,6 +289,7 @@ async function gravarEntrega(id, p, dados, photoData) {
   b.set(F.doc(db, "photos", id), {userId: p.uid, photoData, createdAt: F.serverTimestamp()});
   await comTempo(b.commit(), 20000, "Tempo esgotado: o registro NÃO foi confirmado na nuvem.");
   fotos.set(id, Promise.resolve(photoData));
+  ofAlimentar(id, p, dados);   // base inteligente de oficinas: em segundo plano, nunca bloqueia nem falha o salvamento
 }
 async function excluirEntrega(d) {
   exigir(); if (!navigator.onLine) throw new Error("Sem internet: a exclusão só pode ser feita com conexão.");
@@ -340,7 +343,7 @@ function atualizarRede() {
 async function enviarPendente(p) {
   try { await gravarEntrega(p.id, p.perfil, p.dados, p.photoData); }
   catch (e) {   // se o envio anterior já tinha chegado ao servidor, regravar é "atualização" (negada pelas regras): confirma e considera enviado
-    if (e?.code === "permission-denied") { const s = await F.getDoc(F.doc(db, "deliveries", p.id)).catch(() => null); if (s?.exists() && s.data().userId === p.perfil.uid) return; }
+    if (e?.code === "permission-denied") { const s = await F.getDoc(F.doc(db, "deliveries", p.id)).catch(() => null); if (s?.exists() && s.data().userId === p.perfil.uid) { ofAlimentar(p.id, p.perfil, p.dados); return; } }
     throw e;
   }
 }
@@ -630,9 +633,10 @@ function abrirPainel(root) {
     base('<p class="vazio">Carregando funcionários…</p>');
     try {
       const us = await admCarregarUsuarios(forcar); if (!us) return;
-      base("<h2>Funcionários</h2>" + (us.map(u => `<div class="box"><b>${esc(u.nome)}</b><br>${esc(u.email)}<br><span class="mut">${esc(u.empresa)}</span><br>
+      base('<div class="box"><b>🏭 Base inteligente de oficinas</b><br><span class="mut peq">Estabelecimentos identificados automaticamente pelas entregas.</span><button class="btn pri" id="p-of">Abrir base de oficinas</button></div>' + "<h2>Funcionários</h2>" + (us.map(u => `<div class="box"><b>${esc(u.nome)}</b><br>${esc(u.email)}<br><span class="mut">${esc(u.empresa)}</span><br>
         <span data-c="${esc(u.uid)}" class="mut">contando entregas…</span><button class="btn pri" data-u="${esc(u.uid)}">Ver registros</button></div>`).join("") || '<p class="vazio">Nenhum funcionário.</p>'));
       root.onclick = e => { const b = e.target.closest("[data-u]"); if (b) funcionario(us.find(x => x.uid === b.dataset.u)); };
+      root.querySelector("#p-of").onclick = () => baseOficinas(root, base, falha, () => listaFuncionarios(false));
       us.forEach(u => admContar(u.uid).then(n => { const el = root.querySelector(`[data-c="${u.uid}"]`); if (el && n !== null) el.textContent = `${n} registro(s)`; })
         .catch(() => { const el = root.querySelector(`[data-c="${u.uid}"]`); if (el) el.textContent = "contagem indisponível"; }));
     } catch (e) { falha(e, () => listaFuncionarios(true)); }
@@ -731,6 +735,309 @@ $("#b-rec").onclick = () => {
 };
 $("#b-sair").onclick = sairDaConta;
 document.querySelectorAll(".bar button").forEach(b => b.onclick = () => irPara(b.dataset.v));
+
+// ===================== 8B. BASE INTELIGENTE DE OFICINAS (NOVO) =====================
+// Alimentada em segundo plano SOMENTE depois que uma entrega foi confirmada na nuvem (gravarEntrega). Nunca lança erro e nunca é aguardada:
+// qualquer falha aqui não afeta o salvamento. Coleção própria (oficinas_inteligentes); as coleções existentes não são tocadas.
+// OF-BEGIN
+const OF = {
+  COL: "oficinas_inteligentes",        // um documento por estabelecimento único
+  COL_EV: "oficinas_eventos",          // um marcador por entrega já contabilizada (idempotência: repetir o evento não soma de novo)
+  RAIO_NOME_IGUAL_M: 150,              // mesmo nome normalizado até esta distância = mesmo estabelecimento (desvio normal do GPS)
+  RAIO_NOME_IGUAL_REVISAO_M: 500,      // mesmo nome entre 150 m e 500 m: cadastra separado, mas marca para revisão
+  RAIO_PROXIMO_M: 50,                  // "coordenadas praticamente iguais" (tolerância geográfica inicial, conservadora)
+  RAIO_REVISAO_M: 150,                 // nome parecido até aqui (sem fusão automática): marca para revisão
+  RAIO_MESMO_PONTO_M: 15,              // nome diferente no mesmo ponto: marca para revisão (pode ser outra loja no mesmo prédio)
+  SIM_FUSAO: 0.88,                     // semelhança mínima de escrita para fundir (exige também ≤ RAIO_PROXIMO_M e travas extras)
+  SIM_REVISAO: 0.80,                   // semelhança mínima para marcar "possível duplicidade"
+  PRECISAO_MAX_M: 100,                 // GPS pior que isso não alimenta a base
+  CELULA_GRAUS: 0.002,                 // grade geográfica (~200 m) usada como índice de busca; vizinhas (3x3) cobrem os raios acima
+  MAX_CAND: 50, MAX_TENT: 12, MAX_FILA: 500, PAG: 50, LOTE_EXPORT: 500, NOVOS_DIAS: 7
+};
+
+// ---------- 1. Normalização e comparação (funções puras) ----------
+const ofNormalizar = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+  .replace(/&/g, " e ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+const OF_TIPO_INICIAL = /^(entrega|coleta|devolucao) (.+)$/;
+const OF_GENERICO = /^(entrega|coleta|devolucao)( especial)?( (n|no|num|numero))?( \d+)?$/;   // nomes automáticos do app ("Entrega 3"): não são estabelecimentos
+const OF_CONECTIVOS = new Set(["de", "do", "da", "dos", "das", "e"]);
+function ofNomeDaEntrega(bruto) {                  // devolve {nome, nn} ou null quando o nome não identifica um estabelecimento
+  const limpo = String(bruto ?? "").replace(/\s+/g, " ").trim(); let nn = ofNormalizar(limpo);
+  if (nn.length < 3 || /^[\d ]+$/.test(nn) || OF_GENERICO.test(nn)) return null;
+  let nome = limpo; const m = nn.match(OF_TIPO_INICIAL);
+  if (m) { nn = m[2]; nome = limpo.replace(/^\S+\s+/, "").replace(/^[\s\-–:.,]+/, ""); }   // "Devolução Sul Diesel" -> "Sul Diesel"
+  if (nn.length < 3 || /^[\d ]+$/.test(nn)) return null;
+  return {nome: nome.slice(0, 120), nn: nn.slice(0, 120)};
+}
+function ofLev(a, b) {                             // distância de Levenshtein
+  if (a === b) return 0; if (!a.length) return b.length; if (!b.length) return a.length;
+  let p = Array.from({length: b.length + 1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const c = [i];
+    for (let j = 1; j <= b.length; j++) c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    p = c;
+  }
+  return p[b.length];
+}
+const ofSemConectivos = s => s.split(" ").filter(w => !OF_CONECTIVOS.has(w)).join(" ");
+function ofSimilaridade(a, b) {                    // 0..1 (1 = idênticos, ignorando conectivos como "do", "de")
+  const x = ofSemConectivos(a), y = ofSemConectivos(b); if (!x || !y) return 0;
+  return 1 - ofLev(x, y) / Math.max(x.length, y.length);
+}
+function ofPodeFundir(a, b) {                      // travas extras para fusão automática
+  const x = ofSemConectivos(a), y = ofSemConectivos(b);
+  if (Math.min(x.length, y.length) < 8) return x === y;                                   // nomes curtos: só idênticos
+  if ((x.match(/\d+/g) || []).join(",") !== (y.match(/\d+/g) || []).join(",")) return false;   // "Central 1" ≠ "Central 2"
+  return Math.abs(x.split(" ").length - y.split(" ").length) <= 1;                        // quantidade de palavras compatível
+}
+function ofDist(la1, lo1, la2, lo2) {              // Haversine, em metros
+  const R = 6371000, t = x => x * Math.PI / 180, dLa = t(la2 - la1), dLo = t(lo2 - lo1);
+  const a = Math.sin(dLa / 2) ** 2 + Math.cos(t(la1)) * Math.cos(t(la2)) * Math.sin(dLo / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+const ofCelula = (la, lo) => `${Math.floor(la / OF.CELULA_GRAUS)}_${Math.floor(lo / OF.CELULA_GRAUS)}`;
+function ofCelulasVizinhas(la, lo) {
+  const i = Math.floor(la / OF.CELULA_GRAUS), j = Math.floor(lo / OF.CELULA_GRAUS), r = [];
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) r.push(`${i + a}_${j + b}`);
+  return r;
+}
+function ofHash(s) {                               // cyrb53: id determinístico (mesmo nome => mesmo id)
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
+// ---------- 2. O que pode alimentar a base ----------
+function ofItemDeEntrega(entregaId, snap, d) {     // null = esta entrega não alimenta a base (a entrega em si segue normal)
+  if (!entregaId || !snap?.uid || !d) return null;
+  if (!["standard", "pickup", "return"].includes(d.deliveryType)) return null;   // especial é retroativa: o GPS é do momento do registro, não do estabelecimento
+  if (d.locationKind !== "entrega") return null;
+  const la = d.latitude, lo = d.longitude;
+  if (typeof la !== "number" || typeof lo !== "number" || !Number.isFinite(la) || !Number.isFinite(lo)) return null;
+  if (Math.abs(la) > 90 || Math.abs(lo) > 180 || (Math.abs(la) < 1e-4 && Math.abs(lo) < 1e-4)) return null;
+  const prec = d.accuracyMeters; if (!Number.isFinite(prec) || prec > OF.PRECISAO_MAX_M) return null;
+  const n = ofNomeDaEntrega(d.deliveryName); if (!n) return null;
+  return {entregaId, uid: snap.uid, nome: n.nome, nn: n.nn, lat: la, lng: lo, prec, t: 0};
+}
+
+// ---------- 3. Decisão (pura): atualizar existente ou cadastrar novo ----------
+function ofDecidir(it, cands) {
+  const infos = cands.map(c => ({c, d: ofDist(it.lat, it.lng, c.latitude, c.longitude), igual: c.nomeNormalizado === it.nn,
+    s: c.nomeNormalizado === it.nn ? 1 : ofSimilaridade(it.nn, c.nomeNormalizado)})).filter(x => Number.isFinite(x.d));
+  const porDist = (a, b) => a.d - b.d;
+  // 1) nome normalizado idêntico (e no mesmo lugar): já existe
+  const iguais = infos.filter(x => x.igual && x.d <= OF.RAIO_NOME_IGUAL_M).sort(porDist);
+  if (iguais.length) return {acao: "atualizar", id: iguais[0].c.id, d: iguais[0].d};
+  // 2) nome muito parecido + coordenadas praticamente iguais + travas: mesmo estabelecimento, escrita diferente
+  const fund = infos.filter(x => !x.igual && x.s >= OF.SIM_FUSAO && x.d <= OF.RAIO_PROXIMO_M && ofPodeFundir(it.nn, x.c.nomeNormalizado)).sort(porDist);
+  if (fund.length) return {acao: "atualizar", id: fund[0].c.id, d: fund[0].d, variacao: it.nome};
+  // 3-6) sem fusão: cadastra como novo; quando houver dúvida, marca para revisão administrativa
+  const rev = infos.map(x => {
+    if (x.igual && x.d <= OF.RAIO_NOME_IGUAL_REVISAO_M) return {x, m: "mesmo_nome_distante"};
+    if (!x.igual && x.s >= OF.SIM_REVISAO && x.d <= OF.RAIO_REVISAO_M) return {x, m: "nome_semelhante"};
+    if (!x.igual && x.d <= OF.RAIO_MESMO_PONTO_M) return {x, m: "mesmo_ponto_nome_diferente"};
+    return null;
+  }).filter(Boolean).sort((a, b) => a.x.d - b.x.d)[0];
+  return rev ? {acao: "novo", revisarCom: rev.x.c.id, motivo: rev.m} : {acao: "novo"};
+}
+
+// ---------- 4. Firestore: candidatos e gravação transacional ----------
+async function ofCandidatos(it) {                  // só a vizinhança (mesmo nome + células próximas), nunca a base inteira
+  const col = F.collection(db, OF.COL), mapa = new Map();
+  const [a, b] = await Promise.all([
+    F.getDocsFromServer(F.query(col, F.where("nomeNormalizado", "==", it.nn), F.limit(OF.MAX_CAND))),
+    F.getDocsFromServer(F.query(col, F.where("celula", "in", ofCelulasVizinhas(it.lat, it.lng)), F.limit(OF.MAX_CAND)))
+  ]);
+  [...a.docs, ...b.docs].forEach(s => mapa.set(s.id, {id: s.id, ...s.data()}));
+  return [...mapa.values()];
+}
+// Transação: o marcador da entrega + o documento do estabelecimento. Dois funcionários ao mesmo tempo: o id do 1º cadastro com um nome é
+// determinístico, então a segunda transação enxerga o documento criado pela primeira e apenas atualiza (sem duplicar).
+async function ofGravar(it, dec) {
+  return F.runTransaction(db, async tx => {
+    const evRef = F.doc(db, OF.COL_EV, it.entregaId);
+    if ((await tx.get(evRef)).exists()) return "ja_contabilizada";
+    let alvo = null, criar = null;
+    if (dec.acao === "atualizar") { const r = F.doc(db, OF.COL, dec.id), s = await tx.get(r); if (s.exists()) alvo = {ref: r, data: s.data()}; }
+    if (!alvo) {
+      const idBase = "n_" + ofHash(it.nn), rb = F.doc(db, OF.COL, idBase), sb = await tx.get(rb);
+      if (!sb.exists()) criar = rb;
+      else if (sb.data().nomeNormalizado === it.nn && ofDist(it.lat, it.lng, sb.data().latitude, sb.data().longitude) <= OF.RAIO_NOME_IGUAL_M) alvo = {ref: rb, data: sb.data()};
+      else { const rc = F.doc(db, OF.COL, idBase + "_" + ofCelula(it.lat, it.lng)), sc = await tx.get(rc); if (sc.exists()) alvo = {ref: rc, data: sc.data()}; else criar = rc; }
+    }
+    let oficinaId;
+    if (alvo) {
+      const dd = alvo.data, up = {ultimaIdentificacao: F.serverTimestamp(), ocorrencias: (Number(dd.ocorrencias) || 0) + 1};
+      const v = Array.isArray(dd.variacoesNome) ? dd.variacoesNome : [];
+      if (dec.variacao && dec.variacao !== dd.nome && !v.includes(dec.variacao) && v.length < 5) up.variacoesNome = [...v, dec.variacao];
+      if (ofDist(it.lat, it.lng, dd.latitude, dd.longitude) > OF.RAIO_PROXIMO_M) up.divergencias = (Number(dd.divergencias) || 0) + 1;   // coordenadas consolidadas nunca são sobrescritas
+      tx.update(alvo.ref, up); oficinaId = alvo.ref.id;
+    } else {
+      tx.set(criar, {nome: it.nome, nomeNormalizado: it.nn, latitude: it.lat, longitude: it.lng, celula: ofCelula(it.lat, it.lng), precisaoM: it.prec,
+        primeiroRegistro: F.serverTimestamp(), ultimaIdentificacao: F.serverTimestamp(), ocorrencias: 1, origem: "entrega_facil",
+        revisar: !!dec.revisarCom, ...(dec.revisarCom ? {possivelDuplicidadeDe: dec.revisarCom, motivoRevisao: dec.motivo} : {})});
+      oficinaId = criar.id;
+    }
+    tx.set(evRef, {userId: it.uid, oficinaId, criadoEm: F.serverTimestamp()});
+    return alvo ? "atualizada" : "criada";
+  });
+}
+
+// ---------- 5. Fila de segurança (se a nuvem falhar, tenta de novo depois; nunca bloqueia a entrega) ----------
+let ofFila = Promise.resolve();                    // tudo passa por esta fila: um item por vez neste aparelho
+const ofVistos = new Set();
+const ofChave = uid => "basefila:" + uid;          // guardada na loja "cache" já existente do IndexedDB (sem mudar a estrutura do banco local)
+const ofLerFila = async uid => { try { const c = await idb.get("cache", ofChave(uid)); return c ? JSON.parse(c.v) : []; } catch { return []; } };
+const ofSalvarFila = async (uid, a) => { try { if (a.length) await idb.put("cache", {k: ofChave(uid), v: JSON.stringify(a)}); else await idb.del("cache", ofChave(uid)); } catch {} };
+async function ofEnfileirar(it) {
+  const f = await ofLerFila(it.uid); if (f.some(x => x.entregaId === it.entregaId)) return;
+  f.push(it); await ofSalvarFila(it.uid, f.slice(-OF.MAX_FILA));
+}
+async function ofProcessarItem(it) {
+  if (ofVistos.has(it.entregaId)) return;
+  if (!db || !auth?.currentUser || auth.currentUser.uid !== it.uid || !navigator.onLine) throw Object.assign(new Error("indisponível agora"), {rede: true});
+  const cands = await comTempo(ofCandidatos(it), 15000, "Tempo esgotado ao consultar a base de oficinas.");
+  await comTempo(ofGravar(it, ofDecidir(it, cands)), 25000, "Tempo esgotado ao gravar na base de oficinas.");
+  ofVistos.add(it.entregaId);
+}
+function ofAlimentar(entregaId, snap, dados) {     // ponto de entrada: nunca lança e nunca é aguardado
+  try {
+    const it = ofItemDeEntrega(entregaId, snap, dados); if (!it) return;
+    ofFila = ofFila.then(async () => {
+      try { await ofProcessarItem(it); }
+      catch (e) { if (e?.code === "invalid-argument") console.warn("Base de oficinas:", e.message); else await ofEnfileirar(it); }
+    }).catch(() => {});
+  } catch (e) { console.warn("Base de oficinas:", e); }
+}
+function ofDescarregar() {                         // reenvia o que ficou pendente (volta da conexão, reabertura do app, intervalo)
+  ofFila = ofFila.then(async () => {
+    const uid = auth?.currentUser?.uid; if (!uid || !db || !navigator.onLine) return;
+    const fila = await ofLerFila(uid); if (!fila.length) return;
+    const resto = [];
+    for (let i = 0; i < fila.length; i++) {
+      const it = fila[i];
+      try { await ofProcessarItem(it); }
+      catch (e) {
+        if (e?.code !== "invalid-argument") { it.t = (it.t || 0) + 1; if (it.t < OF.MAX_TENT) resto.push(it); }
+        if (ehRede(e)) { resto.push(...fila.slice(i + 1)); break; }
+      }
+    }
+    await ofSalvarFila(uid, resto);
+  }).catch(() => {});
+}
+addEventListener("online", () => setTimeout(ofDescarregar, 1500));
+document.addEventListener("visibilitychange", () => { if (!document.hidden) ofDescarregar(); });
+setTimeout(ofDescarregar, 20000); setInterval(ofDescarregar, 300000);
+// OF-END
+
+// ---------- 6. Painel administrativo: consulta e exportação (somente leitura) ----------
+const ofData = v => { const d = paraData(v); return d ? d.toLocaleString("pt-BR") : "—"; };
+const ofIso = v => { const d = paraData(v); return d ? d.toISOString() : null; };
+async function ofAdmResumo() {
+  exigirAdmin(); const g = admGen, col = F.collection(db, OF.COL);
+  const [tot, novos, rev, ult] = await Promise.all([
+    F.getCountFromServer(col),
+    F.getCountFromServer(F.query(col, F.where("primeiroRegistro", ">=", new Date(Date.now() - OF.NOVOS_DIAS * 864e5)))),
+    F.getCountFromServer(F.query(col, F.where("revisar", "==", true))),
+    F.getDocs(F.query(col, F.orderBy("ultimaIdentificacao", "desc"), F.limit(1)))
+  ]);
+  if (g !== admGen) return null;
+  return {total: tot.data().count, novos: novos.data().count, revisar: rev.data().count, ultima: ult.docs[0]?.data().ultimaIdentificacao || null};
+}
+async function ofAdmPagina(busca, cursor) {        // paginado; a busca é por início do nome (sem acento/maiúscula)
+  exigirAdmin(); const g = admGen, col = F.collection(db, OF.COL), b = ofNormalizar(busca);
+  const q = []; if (b) q.push(F.where("nomeNormalizado", ">=", b), F.where("nomeNormalizado", "<=", b + ""));
+  q.push(F.orderBy("nomeNormalizado"), F.limit(OF.PAG)); if (cursor) q.push(F.startAfter(cursor));
+  const sn = await F.getDocs(F.query(col, ...q)); if (g !== admGen) return null;
+  return {itens: sn.docs.map(d => ({id: d.id, ...d.data()})), fim: sn.docs.length < OF.PAG, cursor: sn.docs.length ? sn.docs[sn.docs.length - 1] : cursor};
+}
+async function ofAdmTodos(aoProgresso) {           // lê tudo em lotes, apenas leitura
+  exigirAdmin(); const g = admGen, col = F.collection(db, OF.COL), todos = []; let cursor = null;
+  for (;;) {
+    exigirAdmin();
+    const q = [F.orderBy(F.documentId()), F.limit(OF.LOTE_EXPORT)]; if (cursor) q.push(F.startAfter(cursor));
+    const sn = await F.getDocsFromServer(F.query(col, ...q));
+    if (g !== admGen) throw new Error("Exportação cancelada: a sessão administrativa foi encerrada.");
+    sn.docs.forEach(d => todos.push({id: d.id, ...d.data()})); aoProgresso?.(todos.length);
+    if (sn.docs.length < OF.LOTE_EXPORT) break; cursor = sn.docs[sn.docs.length - 1];
+  }
+  return todos;
+}
+const ofLinhaJson = o => ({id: o.id, nome: o.nome, nome_normalizado: o.nomeNormalizado, latitude: o.latitude, longitude: o.longitude,
+  primeiro_registro: ofIso(o.primeiroRegistro), ultima_identificacao: ofIso(o.ultimaIdentificacao), ocorrencias: o.ocorrencias ?? 0,
+  origem: o.origem || "entrega_facil", precisao_m: o.precisaoM ?? null, revisar: !!o.revisar, possivel_duplicidade_de: o.possivelDuplicidadeDe || null,
+  motivo_revisao: o.motivoRevisao || null, variacoes_nome: o.variacoesNome || []});
+function ofMontarJson(todos, agora) {
+  return JSON.stringify({tipo: "base_oficinas", versao: "1.0", data_exportacao: agora.toISOString(), total_estabelecimentos: todos.length, estabelecimentos: todos.map(ofLinhaJson)}, null, 2);
+}
+const ofCsvTxt = s => { let t = String(s ?? ""); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };   // aspas duplicadas + proteção contra fórmulas do Excel
+function ofMontarCsv(todos) {
+  const L = ["ID;NOME;LATITUDE;LONGITUDE;PRIMEIRO REGISTRO;ÚLTIMA IDENTIFICAÇÃO;OCORRÊNCIAS;NOME NORMALIZADO;REVISAR"];
+  todos.forEach(o => L.push([ofCsvTxt(o.id), ofCsvTxt(o.nome), String(o.latitude), String(o.longitude), ofCsvTxt(ofIso(o.primeiroRegistro) || ""), ofCsvTxt(ofIso(o.ultimaIdentificacao) || ""),
+    String(o.ocorrencias ?? 0), ofCsvTxt(o.nomeNormalizado), o.revisar ? "SIM" : "NÃO"].join(";")));
+  return "﻿" + L.join("\r\n") + "\r\n";   // BOM: o Excel reconhece UTF-8 (acentos); ";" é o separador do Excel em português
+}
+function baixarArquivo(nome, texto, tipo) {
+  const u = URL.createObjectURL(new Blob([texto], {type: tipo})), a = document.createElement("a");
+  a.href = u; a.download = nome; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 60000);
+}
+async function ofExportar(formato, botoes, status) {
+  botoes.forEach(b => b.disabled = true);
+  try {
+    status.textContent = "Lendo a base…";
+    const todos = await ofAdmTodos(n => { status.textContent = `Lendo a base… ${n} estabelecimento(s)`; });
+    const agora = new Date(), nome = `base_oficinas_entrega_facil_${isoData(agora)}.${formato}`;
+    if (formato === "json") baixarArquivo(nome, ofMontarJson(todos, agora), "application/json;charset=utf-8");
+    else baixarArquivo(nome, ofMontarCsv(todos), "text/csv;charset=utf-8");
+    status.textContent = "";
+    toast(todos.length ? `Download concluído: ${nome} (${todos.length} estabelecimento(s)). Os dados continuam no Firebase.` : `A base ainda está vazia. Foi gerado ${nome} apenas com a estrutura.`, todos.length ? "ok" : "warn");
+  } catch (e) { status.textContent = ""; toast("Não foi possível exportar: " + msgErro(e), "err"); }
+  finally { botoes.forEach(b => b.disabled = false); }
+}
+function ofCartao(o) {
+  const mot = {mesmo_nome_distante: "mesmo nome em local um pouco distante", nome_semelhante: "nome parecido por perto", mesmo_ponto_nome_diferente: "outro nome no mesmo ponto"}[o.motivoRevisao] || "";
+  return `<div class="box"><b>${esc(o.nome)}</b>${o.revisar ? ' <span class="selo">REVISAR</span>' : ""}
+    <dl><dt>Latitude / Longitude</dt><dd>${esc(o.latitude)}, ${esc(o.longitude)}</dd><dt>Primeiro registro</dt><dd>${esc(ofData(o.primeiroRegistro))}</dd>
+    <dt>Última identificação</dt><dd>${esc(ofData(o.ultimaIdentificacao))}</dd><dt>Ocorrências</dt><dd>${esc(o.ocorrencias ?? 0)}</dd></dl>
+    ${o.revisar ? `<p class="mut peq">Possível duplicidade${mot ? " (" + esc(mot) + ")" : ""} — registro mantido separado, sem fusão automática.</p>` : ""}</div>`;
+}
+// Tela "Base de oficinas" dentro do painel administrativo. base/falha/voltar vêm de abrirPainel (mesmo padrão das outras telas do painel).
+async function baseOficinas(root, base, falha, voltar) {
+  const tela = html => { base(html); painelVoltar = voltar; };
+  tela('<p class="vazio">Carregando base de oficinas…</p>');
+  let r; try { r = await ofAdmResumo(); if (!r) return; } catch (e) { falha(e, () => baseOficinas(root, base, falha, voltar)); return; }
+  tela(`<button class="btn" id="o-voltar">‹ Funcionários</button><h2>Base inteligente de oficinas</h2>
+    <p class="mut peq">Estabelecimentos únicos identificados automaticamente pelas entregas salvas no Entrega Fácil. Exportar é apenas leitura: nada é apagado ou alterado.</p>
+    <div class="kpis"><div class="kpi"><b>${r.total.toLocaleString("pt-BR")}</b>Estabelecimentos cadastrados</div><div class="kpi"><b>${r.novos.toLocaleString("pt-BR")}</b>Novos nos últimos ${OF.NOVOS_DIAS} dias</div>
+    <div class="kpi"><b>${r.revisar.toLocaleString("pt-BR")}</b>Possíveis duplicidades</div><div class="kpi"><b style="font-size:16px">${esc(ofData(r.ultima))}</b>Última atualização</div></div>
+    <button class="btn pri" id="o-ver">🔎 Visualizar oficinas</button>
+    <div class="row"><button class="btn vd" id="o-json">⬇ Baixar base (JSON)</button><button class="btn" id="o-csv">⬇ Baixar base (CSV)</button></div>
+    <p class="mut peq" id="o-st"></p><div id="o-area"></div>`);
+  root.onclick = null;
+  root.querySelector("#o-voltar").onclick = voltar;
+  const bt = [root.querySelector("#o-json"), root.querySelector("#o-csv")], st = root.querySelector("#o-st");
+  bt[0].onclick = () => ofExportar("json", bt, st); bt[1].onclick = () => ofExportar("csv", bt, st);
+  root.querySelector("#o-ver").onclick = () => {
+    const area = root.querySelector("#o-area"); root.querySelector("#o-ver").hidden = true;
+    area.innerHTML = `<label>Buscar pelo início do nome<input id="o-q" type="search" autocomplete="off"></label><div id="o-lst"></div>`;
+    let busca = "", cursor = null, tmp = null, seq = 0;
+    const lst = area.querySelector("#o-lst");
+    const carregar = async mais => {
+      const meu = ++seq; if (!mais) { cursor = null; lst.innerHTML = '<p class="vazio">Carregando…</p>'; }
+      try {
+        const p = await ofAdmPagina(busca, mais ? cursor : null); if (!p || meu !== seq) return; cursor = p.cursor;
+        const velho = lst.querySelector("#o-mais"); if (velho) velho.remove();
+        if (!mais) lst.innerHTML = "";
+        lst.insertAdjacentHTML("beforeend", p.itens.map(ofCartao).join("") || (mais ? "" : '<p class="vazio">Nenhum estabelecimento encontrado.</p>'));
+        if (!p.fim) { lst.insertAdjacentHTML("beforeend", '<button class="btn" id="o-mais">Carregar mais</button>'); lst.querySelector("#o-mais").onclick = () => carregar(true); }
+      } catch (e) { if (meu === seq) lst.innerHTML = `<p class="err">${esc(msgErro(e))}</p>`; }
+    };
+    area.querySelector("#o-q").oninput = e => { clearTimeout(tmp); busca = e.target.value; tmp = setTimeout(() => carregar(false), 350); };
+    carregar(false);
+  };
+}
 
 // ===================== 9. INICIALIZAÇÃO GERAL =====================
 function limparSessaoVisual() {                   // impede reaproveitar visualmente dados da conta anterior

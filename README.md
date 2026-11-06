@@ -2,12 +2,25 @@
 
 Arquivos (todos na raiz): index.html, manifest.json, service-worker.js, 4 ícones PNG, firestore.rules.
 
-## Atualizar (você já tem o Firebase configurado)
-1. Firebase > Firestore > Regras: apague tudo, cole o conteúdo de `firestore.rules` e clique em Publicar. (OBRIGATÓRIO: sem isso o painel Administrador não funciona.)
-2. No `index.html` novo, cole seus valores reais em `FIREBASE_CONFIG` (os mesmos da versão anterior).
-3. GitHub: envie `index.html`, `service-worker.js` e `firestore.rules` para a raiz do repositório (Add file > Upload files, substituindo). Os demais arquivos não mudaram.
-4. A coleção `admins` não é mais usada; pode ser apagada.
+## Atualizar (3 passos)
+1. Firebase > Firestore > Regras: cole o conteúdo de firestore.rules e clique em Publicar. (Sem isso a Devolução é recusada pelo servidor e a nova Base de oficinas não grava nem exporta. As regras antigas foram mantidas sem alteração; só foram acrescentadas as coleções oficinas_inteligentes e oficinas_eventos.)
+   **Publique as regras ANTES do index.html** — até lá o app funciona normalmente e guarda a base pendente no aparelho para enviar depois.
+2. GitHub: envie index.html e service-worker.js para a raiz do repositório, substituindo os atuais.
+3. Abra o app com internet, feche e abra de novo (para o celular pegar a versão nova).
 
-## Administrador
-Ícone ⚙️ (Ajustes) > Administrador > senha 3030. O proprietário usa a conta comum dele. Sair do painel, trocar de aba ou sair da conta bloqueia o painel de novo.
-A senha existe em dois lugares que devem ser iguais: `ADMIN_PIN` no index.html e `'3030'` no firestore.rules.
+## Botão voltar do celular
+Fecha a janela aberta, volta pelas telas visitadas (no painel admin sobe um nível) e, na página principal, pergunta "Deseja sair do aplicativo?". Ao confirmar, toque em voltar mais uma vez (o navegador não permite que o site se feche sozinho).
+
+## Tipos de registro
+Entrega Padrão (azul), Coleta (rosa/vermelho), Devolução (roxo), Entrega Especial (âmbar, retroativa).
+Devolução: foto do produto devolvido, vendedor (obrigatório), motivo/descrição (opcional), data/hora/localização automáticas.
+
+## Modo offline
+Sem internet o registro fica guardado no aparelho e é enviado sozinho quando a conexão volta.
+
+## Navegação entre apps
+O ícone "Rotas" (centro da barra) abre o Equipeças Rotas na mesma aba. No Equipeças Rotas, o ícone "Entregas" volta para cá. Os apps seguem independentes.
+
+## Base inteligente de oficinas (novo)
+Cada entrega/coleta/devolução salva com nome de estabelecimento e GPS válidos alimenta, em segundo plano, a coleção `oficinas_inteligentes` (sem duplicar). Painel: Ajustes > Administrador > "Abrir base de oficinas" (consulta, busca, exportar JSON e CSV).
+Para a base reconhecer o estabelecimento, o funcionário precisa digitar o NOME DO ESTABELECIMENTO no campo "Nome da entrega" (nomes automáticos como "Entrega 3" são ignorados).

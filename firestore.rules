@@ -31,7 +31,9 @@ service cloud.firestore {
     match /deliveries/{id} {
       allow read: if logado() && (resource.data.userId == request.auth.uid || admin());
       allow create: if logado() && request.resource.data.userId == request.auth.uid
-        && request.resource.data.deliveryType in ['standard', 'special']
+        && request.resource.data.deliveryType in ['standard', 'special', 'pickup', 'return']
+        && (request.resource.data.deliveryType != 'return'
+            || (request.resource.data.vendedor is string && request.resource.data.vendedor.size() > 0 && request.resource.data.vendedor.size() <= 120))
         && request.resource.data.hasPhoto == true
         && request.resource.data.createdAt == request.time
         && getAfter(/databases/$(database)/documents/photos/$(id)).data.userId == request.auth.uid;
@@ -47,6 +49,47 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
       allow update: if false;
       allow delete: if logado() && (resource.data.userId == request.auth.uid || admin());
+    }
+
+    // ===== NOVO: Base inteligente de oficinas (Entrega Fácil). As regras acima NÃO foram alteradas. =====
+    // Funcionários (logados) só gravam via app, com formato rígido, e só consultam "vizinhanças" pequenas (limit <= 50) para evitar duplicidade.
+    // A leitura completa, a exportação e a exclusão exigem a sessão de administrador (mesma validada no servidor pelas regras acima).
+    match /oficinas_inteligentes/{id} {
+      allow get: if logado();
+      allow list: if logado() && (admin() || request.query.limit <= 50);
+      allow create: if logado()
+        && request.resource.data.keys().hasOnly(['nome', 'nomeNormalizado', 'latitude', 'longitude', 'celula', 'precisaoM', 'primeiroRegistro',
+                                                 'ultimaIdentificacao', 'ocorrencias', 'origem', 'revisar', 'possivelDuplicidadeDe', 'motivoRevisao'])
+        && request.resource.data.nome is string && request.resource.data.nome.size() > 0 && request.resource.data.nome.size() <= 120
+        && request.resource.data.nomeNormalizado is string && request.resource.data.nomeNormalizado.size() > 0 && request.resource.data.nomeNormalizado.size() <= 120
+        && request.resource.data.latitude is number && request.resource.data.latitude >= -90 && request.resource.data.latitude <= 90
+        && request.resource.data.longitude is number && request.resource.data.longitude >= -180 && request.resource.data.longitude <= 180
+        && request.resource.data.celula is string
+        && request.resource.data.ocorrencias == 1
+        && request.resource.data.origem == 'entrega_facil'
+        && request.resource.data.revisar is bool
+        && request.resource.data.primeiroRegistro == request.time
+        && request.resource.data.ultimaIdentificacao == request.time;
+      // Atualização: nome e coordenadas consolidados NUNCA mudam por aqui; só contador (+1), data da última identificação e metadados.
+      allow update: if logado()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimaIdentificacao', 'ocorrencias', 'variacoesNome', 'divergencias'])
+        && request.resource.data.ultimaIdentificacao == request.time
+        && request.resource.data.ocorrencias == resource.data.ocorrencias + 1;
+      allow delete: if admin();
+    }
+
+    // Marcador "esta entrega já foi contabilizada" (id = id da entrega): torna a gravação idempotente.
+    match /oficinas_eventos/{entregaId} {
+      allow get: if logado() && (resource == null || resource.data.userId == request.auth.uid || admin());
+      allow list: if admin();
+      allow create: if logado()
+        && request.resource.data.keys().hasOnly(['userId', 'oficinaId', 'criadoEm'])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.oficinaId is string
+        && request.resource.data.criadoEm == request.time
+        && existsAfter(/databases/$(database)/documents/oficinas_inteligentes/$(request.resource.data.oficinaId));
+      allow update: if false;
+      allow delete: if admin();
     }
   }
 }

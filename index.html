@@ -896,11 +896,11 @@ async function ofEnfileirar(it) {
   f.push(it); await ofSalvarFila(it.uid, f.slice(-OF.MAX_FILA));
 }
 async function ofProcessarItem(it) {
-  if (ofVistos.has(it.entregaId)) return;
+  if (ofVistos.has(it.entregaId)) return "ja_contabilizada";
   if (!db || !auth?.currentUser || auth.currentUser.uid !== it.uid || !navigator.onLine) throw Object.assign(new Error("indisponível agora"), {rede: true});
   const cands = await comTempo(ofCandidatos(it), 15000, "Tempo esgotado ao consultar a base de oficinas.");
-  await comTempo(ofGravar(it, ofDecidir(it, cands)), 25000, "Tempo esgotado ao gravar na base de oficinas.");
-  ofVistos.add(it.entregaId);
+  const res = await comTempo(ofGravar(it, ofDecidir(it, cands)), 25000, "Tempo esgotado ao gravar na base de oficinas.");
+  ofVistos.add(it.entregaId); return res;
 }
 function ofAlimentar(entregaId, snap, dados) {     // ponto de entrada: nunca lança e nunca é aguardado
   try {
@@ -1003,6 +1003,34 @@ function ofCartao(o) {
     <dt>Última identificação</dt><dd>${esc(ofData(o.ultimaIdentificacao))}</dd><dt>Ocorrências</dt><dd>${esc(o.ocorrencias ?? 0)}</dd></dl>
     ${o.revisar ? `<p class="mut peq">Possível duplicidade${mot ? " (" + esc(mot) + ")" : ""} — registro mantido separado, sem fusão automática.</p>` : ""}</div>`;
 }
+// Importação das entregas JÁ existentes (somente admin). Só LÊ "deliveries"; grava apenas na base de oficinas. Usa o mesmo caminho das entregas novas
+// (mesmas regras de elegibilidade, decisão e transação) e o marcador por entrega: pode ser repetida ou retomada sem contar nada duas vezes.
+async function ofImportarAntigas(aoLer, aoImportar, cancelado) {
+  exigirAdmin(); const g = admGen, uid = auth.currentUser.uid, r = {lidas: 0, elegiveis: 0, semNome: 0, outras: 0, criadas: 0, atualizadas: 0, jaContadas: 0, falhas: 0, parou: false, rede: false, negado: false}, itens = [];
+  let cursor = null;
+  for (;;) {
+    exigirAdmin();
+    const q = [F.orderBy(F.documentId()), F.limit(OF.LOTE_EXPORT)]; if (cursor) q.push(F.startAfter(cursor));
+    const sn = await F.getDocsFromServer(F.query(F.collection(db, "deliveries"), ...q));
+    if (g !== admGen || cancelado()) { r.parou = true; return r; }
+    sn.docs.forEach(x => {
+      const d = x.data(); r.lidas++;
+      const it = ofItemDeEntrega(x.id, {uid}, d);   // uid = o administrador (é quem grava o marcador, como as regras exigem)
+      if (it) { it.ordem = (d.deliveryDate || "") + (d.deliveryTime || ""); itens.push(it); }
+      else if (d.locationKind === "entrega" && ofNomeDaEntrega(d.deliveryName) === null) r.semNome++; else r.outras++;
+    });
+    aoLer(r.lidas);
+    if (sn.docs.length < OF.LOTE_EXPORT) break; cursor = sn.docs[sn.docs.length - 1];
+  }
+  itens.sort((a, b) => a.ordem.localeCompare(b.ordem)); r.elegiveis = itens.length;   // do mais antigo ao mais novo: o 1º nome/GPS de cada oficina é o mais antigo
+  for (let i = 0; i < itens.length; i++) {
+    if (g !== admGen || cancelado()) { r.parou = true; break; }
+    try { const x = await ofProcessarItem(itens[i]); if (x === "criada") r.criadas++; else if (x === "atualizada") r.atualizadas++; else r.jaContadas++; }
+    catch (e) { if (ehRede(e)) { r.rede = true; break; } if (e?.code === "permission-denied") { r.negado = true; break; } r.falhas++; }
+    aoImportar(i + 1, itens.length);
+  }
+  return r;
+}
 // Tela "Base de oficinas" dentro do painel administrativo. base/falha/voltar vêm de abrirPainel (mesmo padrão das outras telas do painel).
 async function baseOficinas(root, base, falha, voltar) {
   const tela = html => { base(html); painelVoltar = voltar; };
@@ -1014,11 +1042,28 @@ async function baseOficinas(root, base, falha, voltar) {
     <div class="kpi"><b>${r.revisar.toLocaleString("pt-BR")}</b>Possíveis duplicidades</div><div class="kpi"><b style="font-size:16px">${esc(ofData(r.ultima))}</b>Última atualização</div></div>
     <button class="btn pri" id="o-ver">🔎 Visualizar oficinas</button>
     <div class="row"><button class="btn vd" id="o-json">⬇ Baixar base (JSON)</button><button class="btn" id="o-csv">⬇ Baixar base (CSV)</button></div>
-    <p class="mut peq" id="o-st"></p><div id="o-area"></div>`);
+    <p class="mut peq" id="o-st"></p>
+    <div class="box"><b>Importar entregas já registradas</b><br><span class="mut peq">Lê as entregas antigas de todos os funcionários e coloca na base os estabelecimentos com nome e GPS válidos. Não altera as entregas. Pode rodar mais de uma vez ou parar e continuar depois: nada é contado duas vezes. Mantenha esta tela aberta até terminar.</span>
+    <button class="btn pri" id="o-imp">▶ Importar entregas antigas</button><button class="btn red" id="o-imp-x" hidden>■ Parar</button><p class="mut peq" id="o-imp-st"></p></div><div id="o-area"></div>`);
   root.onclick = null;
   root.querySelector("#o-voltar").onclick = voltar;
   const bt = [root.querySelector("#o-json"), root.querySelector("#o-csv")], st = root.querySelector("#o-st");
   bt[0].onclick = () => ofExportar("json", bt, st); bt[1].onclick = () => ofExportar("csv", bt, st);
+  const imp = root.querySelector("#o-imp"), pare = root.querySelector("#o-imp-x"), ist = root.querySelector("#o-imp-st"); let cancela = false;
+  pare.onclick = () => { cancela = true; pare.disabled = true; ist.textContent = "Parando…"; };
+  imp.onclick = async () => {
+    cancela = false; imp.disabled = true; pare.hidden = false; pare.disabled = false; bt.forEach(b => b.disabled = true); ist.textContent = "Lendo entregas…";
+    try {
+      const x = await ofImportarAntigas(n => { ist.textContent = `Lendo entregas… ${n}`; }, (i, n) => { ist.textContent = `Importando… ${i} de ${n}`; }, () => cancela);
+      ist.textContent = `${x.lidas} entrega(s) lidas; ${x.elegiveis} com nome e GPS válidos → ${x.criadas} estabelecimento(s) novo(s), ${x.atualizadas} ocorrência(s) somada(s), ${x.jaContadas} já contada(s) antes. Ignoradas: ${x.semNome} sem nome de estabelecimento (ex.: "Entrega 3"), ${x.outras} sem GPS válido, imprecisas ou especiais.`
+        + (x.falhas ? ` ${x.falhas} falha(s) isolada(s): rode de novo.` : "")
+        + (x.parou ? " Importação interrompida: toque em Importar para continuar de onde parou." : "")
+        + (x.rede ? " A conexão caiu: toque em Importar para continuar." : "")
+        + (x.negado ? " O servidor negou a gravação: publique o firestore.rules atualizado e tente de novo." : "");
+      const rr = await ofAdmResumo(); if (rr) { const k = root.querySelectorAll(".kpis .kpi b"); if (k.length === 4) { k[0].textContent = rr.total.toLocaleString("pt-BR"); k[1].textContent = rr.novos.toLocaleString("pt-BR"); k[2].textContent = rr.revisar.toLocaleString("pt-BR"); k[3].textContent = ofData(rr.ultima); } }
+    } catch (e) { ist.textContent = "Não foi possível importar: " + msgErro(e); }
+    finally { imp.disabled = false; pare.hidden = true; bt.forEach(b => b.disabled = false); }
+  };
   root.querySelector("#o-ver").onclick = () => {
     const area = root.querySelector("#o-area"); root.querySelector("#o-ver").hidden = true;
     area.innerHTML = `<label>Buscar pelo início do nome<input id="o-q" type="search" autocomplete="off"></label><div id="o-lst"></div>`;

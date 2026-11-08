@@ -7,74 +7,118 @@
 <link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" href="icon-192.png">
 <title>Entrega Fácil</title>
 <style>
-:root{--az:#1a6cf0;--az2:#e8f0fe;--vd:#12a150;--vm:#d93025;--am:#f59e0b;--am2:#fff4dc;--bg:#f4f6fa;--tx:#1b2430;--mut:#667085;--bd:#dfe5ee;--sb:env(safe-area-inset-bottom,0px)}
+:root{--az:#2563eb;--az-2:#1d4ed8;--az2:#e8f0ff;--vd:#16a34a;--vd2:#dcfce7;--vm:#dc2626;--am:#f59e0b;--am2:#fff6e0;--ro:#e11d74;--ro2:#ffe6f0;--vi:#7c3aed;--vi2:#f0e9ff;
+--bg:#f3f6fc;--tx:#0f172a;--mut:#64748b;--bd:#e2e8f0;--sb:env(safe-area-inset-bottom,0px);--st:env(safe-area-inset-top,0px);--r:20px;
+--sombra:0 1px 2px rgba(15,23,42,.04),0 10px 28px -14px rgba(15,23,42,.22)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color-scheme:light}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color-scheme:light;-webkit-font-smoothing:antialiased}
+body{background:linear-gradient(180deg,#e6eeff 0,var(--bg) 300px) no-repeat,var(--bg);min-height:100vh}
 [hidden]{display:none!important}
-h1,h2{margin:.2em 0}.mut{color:var(--mut)}.peq{font-size:13px}
+h1,h2{margin:.2em 0;letter-spacing:-.02em}h2{font-size:22px;font-weight:800}
+.mut{color:var(--mut)}.peq{font-size:13px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:2px}
 input,select,textarea,button{font:inherit;font-size:16px}
-input,select,textarea{width:100%;padding:12px;border:1px solid var(--bd);border-radius:12px;background:#fff;color:var(--tx);margin-top:4px}
-label{display:block;margin:10px 0;font-weight:600;font-size:14px}
-.btn{display:inline-flex;justify-content:center;align-items:center;gap:6px;min-height:48px;padding:0 16px;border-radius:12px;border:1px solid var(--bd);background:#fff;color:var(--tx);font-weight:600;cursor:pointer;width:100%;margin:6px 0}
-.btn.pri{background:var(--az);border-color:var(--az);color:#fff}.btn.vd{background:var(--vd);border-color:var(--vd);color:#fff}.btn.red{background:var(--vm);border-color:var(--vm);color:#fff}
-.btn:disabled{opacity:.6}.peqb{width:auto;min-height:36px;margin:0;font-size:14px}a.btn{text-decoration:none}
-#auth{max-width:420px;margin:0 auto;padding:calc(30px + env(safe-area-inset-top,0px)) 20px 30px;text-align:center}
-#auth form{text-align:left}.logo{width:96px;height:96px;border-radius:22px}
-.top{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;background:#fff;border-bottom:1px solid var(--bd)}
-.top h1{font-size:18px;color:var(--az);margin:0}#quem{flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.view{max-width:720px;margin:0 auto;padding:14px 14px calc(100px + var(--sb))}
-.bar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:grid;grid-template-columns:repeat(5,1fr);background:#fff;border-top:1px solid var(--bd);padding-bottom:var(--sb)}
-.bar button{border:0;background:none;min-height:58px;color:var(--mut);font-size:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
-.bar button span{font-size:22px}.bar button.on{color:var(--az);font-weight:700}
-.bar a{min-height:58px;color:var(--mut);font-size:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-decoration:none}.bar a span{font-size:22px}.bar a:active{color:var(--az)}
-.cal,.box,.card{background:#fff;border:1px solid var(--bd);border-radius:16px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
-.cal{padding:10px}.calh{display:flex;justify-content:space-between;align-items:center}
-.calh button{border:0;background:var(--az2);color:var(--az);width:44px;height:44px;border-radius:12px;font-size:22px}
-.sem,.grade{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;gap:3px}.sem span{font-size:12px;color:var(--mut);padding:6px 0}
-.dia{position:relative;aspect-ratio:1;border:1px solid transparent;border-radius:10px;background:#fff;color:var(--tx);padding:0}
-.dia.hoje{border-color:var(--az);font-weight:700}.dia.sel{background:var(--az);color:#fff}
-.dia em{position:absolute;right:3px;bottom:2px;font-size:10px;font-style:normal;background:var(--vd);color:#fff;border-radius:8px;padding:0 5px}
-.resdia{margin:12px 0 4px}.row{display:flex;gap:8px;flex-wrap:wrap}.row .btn{flex:1}
-.card{display:grid;grid-template-columns:64px 1fr;gap:10px;padding:10px;margin:10px 0;border-left:6px solid var(--az)}
-.card.esp{border-left-color:var(--am);background:var(--am2)}
-.th{width:64px;height:64px;border-radius:10px;object-fit:cover;background:#e5e9f0}
-.inf b{display:block}.acts{grid-column:1/-1;display:flex;gap:8px}
-.acts button{flex:1;min-height:44px;border-radius:10px;border:1px solid var(--bd);background:#fff;font-weight:600}
-.acts .x{flex:0 0 52px;color:var(--vm);border-color:var(--vm)}
-.selo{display:inline-block;background:var(--am);color:#3b2a00;font-weight:800;font-size:11px;padding:3px 8px;border-radius:8px;margin-top:3px}
-.tag{display:inline-block;background:var(--az2);color:var(--az);font-weight:700;font-size:11px;padding:3px 8px;border-radius:8px;margin-top:3px}
-.vazio{text-align:center;color:var(--mut);padding:20px}.box{padding:14px;margin:10px 0}
-#modal{position:fixed;inset:0;z-index:20;background:rgba(16,24,40,.5);display:flex;align-items:flex-end;justify-content:center}
-.sheet{background:#fff;width:100%;max-width:640px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + var(--sb))}
-.sheet img.foto{width:100%;border-radius:12px;margin:8px 0}.prev{width:100%;max-height:260px;object-fit:contain;border-radius:12px;margin-top:8px}
-.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tabs button{min-height:44px;border-radius:10px;border:1px solid var(--bd);background:#fff;font-weight:700}
-.tabs .on{background:var(--az);color:#fff;border-color:var(--az)}.tabs .on.e{background:var(--am);border-color:var(--am);color:#3b2a00}
-.aviso{background:var(--am2);border:1px solid var(--am);border-radius:12px;padding:10px;font-size:14px;margin:10px 0}.aviso.az{background:var(--az2);border-color:var(--az)}
-.err{color:var(--vm);font-weight:600;margin:8px 0}
-.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.kpi{background:#fff;border:1px solid var(--bd);border-radius:14px;padding:12px}.kpi b{font-size:26px;display:block;color:var(--az)}
-.graf{display:flex;align-items:flex-end;gap:2px;height:110px;background:#fff;border:1px solid var(--bd);border-radius:14px;padding:8px}.graf i{flex:1;background:var(--az);border-radius:3px 3px 0 0;min-height:2px}
-dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:8px}dd{margin:0;font-weight:600}
-#toast{position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top,0px));z-index:50;padding:12px;border-radius:12px;color:#fff;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s}
-#toast.show{opacity:1}#toast.ok{background:var(--vd)}#toast.err{background:var(--vm)}#toast.warn{background:#b45309}
-
-:root{--ro:#e11d74;--ro2:#ffe3ef}
-.card.col{border-left-color:var(--ro);background:var(--ro2)}.tag.col{background:var(--ro);color:#fff}
-.tabs.t3{grid-template-columns:1fr 1fr 1fr}.tabs.t3 button{font-size:13px;padding:0 4px}.tabs .on.c{background:var(--ro);border-color:var(--ro);color:#fff}
-.aviso.ro{background:var(--ro2);border-color:var(--ro)}
-#net{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 14px;font-size:14px;font-weight:600;background:var(--am2);border-bottom:1px solid var(--am)}
-#net.off{background:#fde8e8;border-color:var(--vm)}#net button{min-height:34px;padding:0 12px;border-radius:10px;border:1px solid var(--bd);background:#fff;font-weight:600}
-:root{--vi:#7c3aed;--vi2:#efe7ff}
-.card.dev{border-left-color:var(--vi);background:var(--vi2)}.tag.dev{background:var(--vi);color:#fff}
-.tabs .on.d{background:var(--vi);border-color:var(--vi);color:#fff}.aviso.vi{background:var(--vi2);border-color:var(--vi)}
-.tabs button{line-height:1.15}
-#aviso{position:fixed;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top,0px));z-index:60;background:#b42318;color:#fff;padding:10px 6px 10px 12px;border-radius:12px;font-size:14px;display:flex;gap:8px;align-items:flex-start}
-#aviso[hidden]{display:none}#aviso-t{flex:1}#aviso-x{flex:0 0 44px;min-height:44px;border:0;border-radius:10px;background:rgba(255,255,255,.2);color:#fff;font-size:20px;font-weight:700}
+input,select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--bd);border-radius:14px;background:#fff;color:var(--tx);margin-top:6px;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:0;border-color:var(--az);box-shadow:0 0 0 4px rgba(37,99,235,.15)}
+select{appearance:none;-webkit-appearance:none;padding-right:40px;background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round'/></svg>") no-repeat right 15px center}
+label{display:block;margin:12px 0;font-weight:700;font-size:13px;color:#334155;letter-spacing:.01em}
+.btn{display:inline-flex;justify-content:center;align-items:center;gap:8px;min-height:52px;padding:0 18px;border-radius:16px;border:1.5px solid var(--bd);background:#fff;color:var(--tx);font-weight:700;font-size:15px;cursor:pointer;width:100%;margin:6px 0;box-shadow:0 1px 2px rgba(15,23,42,.05);transition:transform .08s,box-shadow .15s,filter .15s}
+.btn:active{transform:scale(.98)}
+.btn.pri{background:linear-gradient(135deg,#3b82f6,var(--az-2));border-color:transparent;color:#fff;box-shadow:0 10px 20px -10px rgba(37,99,235,.8)}
+.btn.vd{background:linear-gradient(135deg,#22c55e,#15803d);border-color:transparent;color:#fff;box-shadow:0 10px 20px -10px rgba(22,163,74,.8)}
+.btn.red{background:linear-gradient(135deg,#ef4444,#b91c1c);border-color:transparent;color:#fff;box-shadow:0 10px 20px -10px rgba(220,38,38,.7)}
+.btn:disabled{opacity:.55;pointer-events:none}.peqb{width:auto;min-height:38px;margin:0;font-size:14px;padding:0 16px;border-radius:999px}a.btn{text-decoration:none}
+#auth{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+.hero{background:linear-gradient(160deg,#1d4ed8 0%,#2563eb 50%,#5b9bff 100%);color:#fff;padding:calc(40px + var(--st)) 24px 78px;text-align:center;border-radius:0 0 38px 38px;position:relative;overflow:hidden}
+.hero::before,.hero::after{content:"";position:absolute;border-radius:50%;background:rgba(255,255,255,.09)}
+.hero::before{width:230px;height:230px;right:-80px;top:-70px}.hero::after{width:170px;height:170px;left:-60px;bottom:-70px}
+.logo{width:92px;height:92px;border-radius:26px;box-shadow:0 16px 32px -10px rgba(0,0,0,.5);position:relative}
+.hero h1{font-size:31px;font-weight:800;margin:14px 0 4px;position:relative;letter-spacing:-.03em}.hero p{margin:0;opacity:.92;position:relative}.hero .mut{color:rgba(255,255,255,.92)}
+.auth-card{background:#fff;margin:-46px 16px 20px;border-radius:28px;padding:22px 20px;box-shadow:var(--sombra),0 0 0 1px rgba(226,232,240,.7);position:relative}
+#auth form{text-align:left}.auth-card .peq{text-align:center;margin:14px 0 0}
+.top{position:sticky;top:0;z-index:5;display:flex;gap:12px;align-items:center;padding:calc(10px + var(--st)) 14px 10px;background:rgba(255,255,255,.84);-webkit-backdrop-filter:saturate(1.6) blur(14px);backdrop-filter:saturate(1.6) blur(14px);border-bottom:1px solid rgba(226,232,240,.85)}
+.top .marca{width:36px;height:36px;border-radius:11px;flex:0 0 36px;box-shadow:0 6px 14px -6px rgba(37,99,235,.7)}
+#quem{flex:1;min-width:0;line-height:1.2}#quem b{display:block;font-size:15px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#quem small{display:block;font-size:12px;color:var(--mut);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.view{max-width:720px;margin:0 auto;padding:16px 16px calc(116px + var(--sb))}.view:not([hidden]){animation:fade .22s ease}
+.bar{position:fixed;left:12px;right:12px;bottom:calc(10px + var(--sb));z-index:6;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;max-width:560px;margin:0 auto;padding:6px;background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(16px) saturate(1.6);backdrop-filter:blur(16px) saturate(1.6);border:1px solid rgba(226,232,240,.9);border-radius:28px;box-shadow:0 20px 44px -16px rgba(15,23,42,.4)}
+.bar button,.bar a{border:0;background:none;min-height:58px;border-radius:22px;color:var(--mut);font-size:11px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-decoration:none;transition:background .15s,color .15s}
+.bar svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.bar button.on{color:var(--az);background:var(--az2)}.bar a:active,.bar button:active{background:var(--az2);color:var(--az)}#ir-rotas{color:#15803d}
+.cal,.box,.card{background:#fff;border:1px solid rgba(226,232,240,.9);border-radius:var(--r);box-shadow:var(--sombra)}
+.cal{padding:14px}.calh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}.calt{display:flex;flex-direction:column;align-items:center;gap:4px}
+.calh b{font-size:17px;font-weight:800;letter-spacing:-.02em}
+.calh button{border:0;background:var(--az2);color:var(--az);width:44px;height:44px;border-radius:14px;font-size:22px;font-weight:700}
+.calh .hojeb{width:auto;height:26px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:800}
+.sem,.grade{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;gap:4px}.sem span{font-size:11px;font-weight:800;color:var(--mut);padding:6px 0}
+.dia{position:relative;aspect-ratio:1;border:0;border-radius:14px;background:transparent;color:var(--tx);padding:0;font-weight:600;font-size:15px;transition:background .12s}
+.dia:active{background:var(--az2)}.dia.hoje{box-shadow:inset 0 0 0 2px var(--az);font-weight:800;color:var(--az)}
+.dia.sel{background:linear-gradient(135deg,#3b82f6,var(--az-2));color:#fff;box-shadow:0 10px 18px -10px rgba(37,99,235,.9)}
+.dia em{position:absolute;right:4px;top:4px;min-width:16px;height:16px;font-size:10px;font-style:normal;font-weight:800;background:var(--vd);color:#fff;border-radius:8px;display:grid;place-items:center;padding:0 4px}
+.resdia{margin:20px 2px 8px;font-size:17px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}.resdia b{font-weight:800}
+.chip{font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;background:var(--az2);color:var(--az)}.chip.col{background:var(--ro2);color:var(--ro)}.chip.dev{background:var(--vi2);color:var(--vi)}.chip.esp{background:var(--am2);color:#b45309}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row .btn{flex:1}
+.card{display:grid;grid-template-columns:72px 1fr;gap:12px;padding:12px;margin:12px 0;border-left:6px solid var(--az);animation:subir .28s ease both}
+.card.esp{border-left-color:var(--am);background:linear-gradient(135deg,var(--am2),#fff 75%)}
+.card.col{border-left-color:var(--ro);background:linear-gradient(135deg,var(--ro2),#fff 75%)}
+.card.dev{border-left-color:var(--vi);background:linear-gradient(135deg,var(--vi2),#fff 75%)}
+.th{width:72px;height:72px;border-radius:16px;object-fit:cover;background:#e8edf5}
+.th:not([src]){background:linear-gradient(90deg,#e8edf5 25%,#f6f8fc 50%,#e8edf5 75%);background-size:200% 100%;animation:brilho 1.3s linear infinite}
+.inf b{display:block;font-size:16px;font-weight:800;letter-spacing:-.01em}.inf{min-width:0;overflow-wrap:anywhere}
+.acts{grid-column:1/-1;display:flex;gap:8px;margin-top:2px}
+.acts button{flex:1;min-height:46px;border-radius:14px;border:1.5px solid var(--bd);background:rgba(255,255,255,.9);font-weight:700;font-size:14px;color:var(--tx)}
+.acts button:active{background:var(--az2)}.acts .x{flex:0 0 54px;color:var(--vm);border-color:#fecaca;background:#fff5f5}
+.selo{display:inline-block;background:var(--am);color:#3b2a00;font-weight:800;font-size:11px;padding:4px 10px;border-radius:999px;margin-top:4px}
+.tag{display:inline-block;background:var(--az2);color:var(--az);font-weight:800;font-size:11px;padding:4px 10px;border-radius:999px;margin-top:4px;letter-spacing:.02em}
+.tag.col{background:var(--ro);color:#fff}.tag.dev{background:var(--vi);color:#fff}
+.vazio{text-align:center;color:var(--mut);padding:24px 12px;font-weight:600}.box{padding:16px;margin:12px 0}
+.perfil{display:flex;gap:14px;align-items:center}.av{width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,var(--vi));color:#fff;font-weight:800;font-size:22px;display:grid;place-items:center;flex:0 0 54px}
+#modal{position:fixed;inset:0;z-index:20;background:rgba(15,23,42,.45);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;animation:fade .18s ease}
+.sheet{background:#fff;width:100%;max-width:640px;max-height:92vh;overflow:auto;border-radius:28px 28px 0 0;padding:22px 18px calc(18px + var(--sb));animation:subirsheet .26s cubic-bezier(.2,.8,.2,1);box-shadow:0 -24px 50px -22px rgba(15,23,42,.45)}
+.sheet::before{content:"";display:block;width:44px;height:5px;border-radius:3px;background:#cbd5e1;margin:-10px auto 14px}
+.sheet img.foto{width:100%;border-radius:18px;margin:8px 0}.prev{width:100%;max-height:260px;object-fit:contain;border-radius:18px;margin-top:8px;background:#f1f5f9}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tabs button{min-height:50px;border-radius:16px;border:1.5px solid var(--bd);background:#fff;font-weight:800;font-size:14px;line-height:1.15;color:#334155;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,color .15s,border-color .15s}
+.tabs button::before{content:"";width:10px;height:10px;border-radius:50%;flex:0 0 10px;background:var(--cor,var(--az))}
+.tabs [data-t=pickup]{--cor:var(--ro)}.tabs [data-t=return]{--cor:var(--vi)}.tabs [data-t=special]{--cor:var(--am)}
+.tabs .on{background:var(--az);color:#fff;border-color:var(--az);box-shadow:0 10px 18px -10px rgba(37,99,235,.9)}.tabs .on::before{background:#fff}
+.tabs .on.e{background:var(--am);border-color:var(--am);color:#3b2a00}.tabs .on.e::before{background:#3b2a00}
+.tabs .on.c{background:var(--ro);border-color:var(--ro);color:#fff}.tabs .on.d{background:var(--vi);border-color:var(--vi);color:#fff}
+.aviso{background:var(--am2);border:1px solid var(--am);border-radius:16px;padding:12px;font-size:14px;margin:12px 0}
+.aviso.az{background:var(--az2);border-color:#93c5fd}.aviso.ro{background:var(--ro2);border-color:var(--ro)}.aviso.vi{background:var(--vi2);border-color:var(--vi)}
+.err{color:var(--vm);font-weight:700;margin:8px 0}
+.campo{position:relative;display:block}.campo input,.campo textarea{padding-right:58px}
+.mic{position:absolute;right:5px;top:11px;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:50%;background:var(--az2);color:var(--az);display:grid;place-items:center;cursor:pointer;transition:background .15s,color .15s}
+.mic svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mic:active{transform:scale(.94)}.mic.on{background:var(--vm);color:#fff;animation:pulso 1.2s ease-out infinite}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.kpi{background:#fff;border:1px solid rgba(226,232,240,.9);border-radius:18px;padding:14px;box-shadow:var(--sombra);font-size:13px;font-weight:600;color:var(--mut)}
+.kpi b{font-size:28px;display:block;color:var(--az);font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:2px}
+.graf{display:flex;align-items:flex-end;gap:3px;height:120px;background:#fff;border:1px solid rgba(226,232,240,.9);border-radius:18px;padding:12px 10px;box-shadow:var(--sombra)}
+.graf i{flex:1;background:linear-gradient(180deg,#60a5fa,var(--az));border-radius:6px 6px 2px 2px;min-height:3px}
+dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:10px;font-weight:700}dd{margin:0;font-weight:700}
+#net{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:10px 14px 0;padding:10px 14px;font-size:14px;font-weight:700;background:var(--am2);border:1px solid var(--am);border-radius:16px}
+#net.off{background:#fde8e8;border-color:var(--vm)}#net button{min-height:36px;padding:0 14px;border-radius:12px;border:1.5px solid var(--bd);background:#fff;font-weight:700}
+#toast{position:fixed;left:14px;right:14px;top:calc(12px + var(--st));z-index:50;padding:14px 16px;border-radius:18px;color:#fff;font-weight:700;font-size:14px;line-height:1.35;opacity:0;transform:translateY(-12px);pointer-events:none;transition:opacity .22s,transform .22s;box-shadow:0 18px 36px -14px rgba(15,23,42,.55)}
+#toast.show{opacity:1;transform:none}#toast.ok{background:linear-gradient(135deg,#22c55e,#15803d)}#toast.err{background:linear-gradient(135deg,#ef4444,#b91c1c)}#toast.warn{background:linear-gradient(135deg,#f59e0b,#b45309)}
+#aviso{position:fixed;left:8px;right:8px;top:calc(8px + var(--st));z-index:60;background:#b42318;color:#fff;padding:10px 6px 10px 14px;border-radius:18px;font-size:14px;display:flex;gap:8px;align-items:flex-start;box-shadow:0 18px 36px -14px rgba(15,23,42,.55)}
+#aviso[hidden]{display:none}#aviso-t{flex:1}#aviso-x{flex:0 0 44px;min-height:44px;border:0;border-radius:12px;background:rgba(255,255,255,.2);color:#fff;font-size:20px;font-weight:700}
+#a-status:empty,#a-err:empty{display:none}
+.row>label{flex:1 1 0;min-width:0}.row>label input{min-width:0}
+input[type=date],input[type=time],input[type=month]{min-width:0;font-size:15px;padding-left:12px;padding-right:10px}
+#v-res .kpis .kpi:nth-child(4) b{color:#b45309}#v-res .kpis .kpi:nth-child(5) b{color:var(--ro)}#v-res .kpis .kpi:nth-child(6) b{color:var(--vi)}
+@keyframes subir{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes subirsheet{from{transform:translateY(36px);opacity:.6}to{transform:none;opacity:1}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes brilho{to{background-position:-200% 0}}
+@keyframes pulso{0%{box-shadow:0 0 0 0 rgba(220,38,38,.55)}100%{box-shadow:0 0 0 16px rgba(220,38,38,0)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
 <div id="aviso" hidden role="alert"><span id="aviso-t"></span><button id="aviso-x" type="button" aria-label="Fechar aviso">✕</button></div>
 <div id="toast" role="status"></div>
 <main id="auth">
- <img src="icon-192.png" class="logo" alt="">
- <h1>Entrega Fácil</h1><p class="mut">Registre e comprove suas entregas.</p>
+ <div class="hero"><img src="icon-192.png" class="logo" alt=""><h1>Entrega Fácil</h1><p class="mut">Registre e comprove suas entregas.</p></div>
+ <div class="auth-card">
  <p id="a-status" class="mut"></p><p id="a-err" class="err" role="alert"></p><div id="a-home"><button class="btn pri" data-go="cad">Criar minha conta</button><button class="btn" data-go="log">Já tenho uma conta — Entrar</button></div>
  <form id="f-cad" hidden>
   <label>Nome completo<input name="nome" required autocomplete="name"></label>
@@ -91,20 +135,21 @@ dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:8px}dd{margin:0;font-w
   <button type="button" class="btn" data-go="home">Voltar</button>
  </form>
  <p class="mut peq">A localização só é coletada com a sua permissão no navegador.</p>
+ </div>
 </main>
 <main id="app" hidden>
- <header class="top"><h1>Entrega Fácil</h1><span id="quem" class="mut peq"></span><button class="btn peqb" id="b-sair">Sair</button></header>
+ <header class="top"><img class="marca" src="icon-192.png" alt=""><h1 class="sr">Entrega Fácil</h1><div id="quem"></div><button class="btn peqb" id="b-sair">Sair</button></header>
  <div id="net" hidden></div>
  <section id="v-agenda" class="view"></section>
  <section id="v-hist" class="view" hidden></section>
  <section id="v-res" class="view" hidden></section>
  <section id="v-cfg" class="view" hidden></section>
  <nav class="bar">
-  <button data-v="agenda" class="on"><span>📅</span>Agenda</button>
-  <button data-v="hist"><span>🕘</span>Histórico</button>
-  <a id="ir-rotas" href="https://jeanjs250sipriano-blip.github.io/equipecas-rotas/" aria-label="Abrir o aplicativo Equipeças Rotas"><span>🗺️</span>Rotas</a>
-  <button data-v="res"><span>📊</span>Resumo</button>
-  <button data-v="cfg"><span>⚙️</span>Ajustes</button>
+  <button data-v="agenda" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16.5" rx="3.5"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/></svg>Agenda</button>
+  <button data-v="hist"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg>Histórico</button>
+  <a id="ir-rotas" href="https://jeanjs250sipriano-blip.github.io/equipecas-rotas/" aria-label="Abrir o aplicativo Equipeças Rotas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>Rotas</a>
+  <button data-v="res"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Resumo</button>
+  <button data-v="cfg"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button>
  </nav>
 </main>
 <div id="modal" hidden></div>
@@ -142,7 +187,7 @@ let tt;
 function toast(m, tipo = "ok") { const t = $("#toast"); t.textContent = m; t.className = "show " + tipo; clearTimeout(tt); tt = setTimeout(() => t.className = "", 5500); }
 let modalAoVoltar = null;                          // o que fazer se o usuário tocar em "voltar" com este modal aberto
 function abrirModal(html) { const m = $("#modal"); m.innerHTML = `<div class="sheet">${html}</div>`; m.hidden = false; modalAoVoltar = null; return m.firstChild; }
-function fecharModal() { const m = $("#modal"); m.hidden = true; m.innerHTML = ""; modalAoVoltar = null; }
+function fecharModal() { pararMic(); const m = $("#modal"); m.hidden = true; m.innerHTML = ""; modalAoVoltar = null; }
 function confirmar(msg, botao) {
   return new Promise(res => {
     const s = abrirModal(`<p>${esc(msg)}</p><div class="row"><button class="btn" data-r="0">Cancelar</button><button class="btn red" data-r="1">${esc(botao)}</button></div>`);
@@ -150,6 +195,51 @@ function confirmar(msg, botao) {
     s.onclick = e => { const b = e.target.closest("[data-r]"); if (b) { fecharModal(); res(b.dataset.r === "1"); } };
   });
 }
+
+// ----- Ditado por voz (Web Speech API): microfone ao lado dos campos de texto -----
+// Funciona em Chrome/Edge no Android e em computadores; precisa de internet (o reconhecimento é feito pelo navegador na nuvem).
+// Onde não existe, o botão avisa e o usuário pode usar o microfone do próprio teclado do celular.
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const ICONE_MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>';
+let micAtivo = null;                               // {btn, parar()} do microfone que está ouvindo agora
+function pararMic() { if (micAtivo) micAtivo.parar(); }
+const MIC_CONECT = new Set(["de", "do", "da", "dos", "das", "e", "em", "no", "na"]);
+const micTitulo = t => t.toLowerCase().split(" ").map((w, i) => i && MIC_CONECT.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+const MIC_ERROS = {"not-allowed": "Permissão do microfone negada. Libere o microfone para este site nas configurações do navegador.", "service-not-allowed": "O navegador não permitiu o ditado por voz.",
+  "network": "O ditado por voz precisa de internet.", "no-speech": "Não ouvi nada. Toque no microfone e fale de novo.", "audio-capture": "Microfone não encontrado."};
+// modo: "titulo" (nomes: Oficina São José), "frase" (anotações: primeira letra maiúscula) ou vazio (texto como falado).
+// padrao(): texto automático do campo (ex.: "Entrega 2"); ao começar a falar ele é substituído, sem precisar apagar.
+function ligarMic(btn, alvo, modo, padrao) {
+  btn.onclick = () => {
+    if (!SR) { toast("Este navegador não tem ditado por voz. Use o microfone do teclado do celular.", "warn"); return; }
+    if (micAtivo && micAtivo.btn === btn) { micAtivo.parar(); return; }
+    pararMic();
+    const r = new SR(); r.lang = "pt-BR"; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+    const inicio = alvo.value, ph = alvo.placeholder, eraPadrao = !!padrao && inicio.trim() !== "" && inicio.trim() === padrao();
+    const est = {btn, parar: () => { try { r.stop(); } catch {} }};
+    const fim = () => { btn.classList.remove("on"); btn.setAttribute("aria-pressed", "false"); alvo.placeholder = ph; if (micAtivo === est) micAtivo = null; };
+    r.onstart = () => { btn.classList.add("on"); btn.setAttribute("aria-pressed", "true"); alvo.placeholder = "🎙 Ouvindo… fale agora"; };
+    r.onresult = e => {
+      let t = ""; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + " ";
+      t = t.replace(/\s+/g, " ").trim(); if (!t) return;
+      const base = eraPadrao ? "" : inicio.replace(/\s+$/, "");
+      if (modo === "titulo") t = micTitulo(t); else if (modo === "frase" && !base) t = t.charAt(0).toUpperCase() + t.slice(1);
+      alvo.value = base ? base + " " + t : t;      // o texto automático ("Entrega 2") some assim que a pessoa começa a falar
+      alvo.dispatchEvent(new Event("input", {bubbles: true}));
+    };
+    r.onerror = e => { const m = MIC_ERROS[e.error]; if (m) toast(m, "warn"); };
+    r.onend = fim; micAtivo = est;
+    try { r.start(); } catch { fim(); }
+  };
+}
+function ligarMics(raiz, padroes = {}) {
+  raiz.querySelectorAll("button[data-mic]").forEach(b => { const alvo = raiz.querySelector("#" + b.dataset.mic); if (alvo) ligarMic(b, alvo, b.dataset.modo || "", padroes[b.dataset.mic]); });
+}
+const campoMic = (campo, id, modo) => `<span class="campo">${campo}<button type="button" class="mic" data-mic="${id}" data-modo="${modo}" aria-label="Falar para escrever" aria-pressed="false">${ICONE_MIC}</button></span>`;
+// "Instalar aplicativo": o navegador só avisa que é possível quando o app ainda não está instalado.
+let instalarEvt = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); instalarEvt = e; });
+addEventListener("appinstalled", () => { instalarEvt = null; });
 
 // ===================== 2. FIREBASE (Authentication + Cloud Firestore; sem Storage) =====================
 // >>> PREENCHA com os valores do SEU projeto (copie do seu firebase-config.js antigo ou do console do Firebase) <<<
@@ -467,6 +557,10 @@ function acaoCartao(ev, lista, depois) {
   return true;
 }
 
+function chipsDoDia(l) {                           // quantos registros de cada tipo no dia
+  const T = {standard: ["", "Entrega", "Entregas"], pickup: ["col", "Coleta", "Coletas"], return: ["dev", "Devolução", "Devoluções"], special: ["esp", "Especial", "Especiais"]};
+  return Object.entries(T).map(([k, [c, u, pl]]) => { const n = l.filter(d => d.deliveryType === k).length; return n ? `<span class="chip ${c}">${n} ${n > 1 ? pl : u}</span>` : ""; }).join("");
+}
 function montarAgenda(root, lista, o = {}) {
   const hj = new Date(), st = {y: hj.getFullYear(), m: hj.getMonth(), sel: isoData(hj)};
   const draw = () => {
@@ -476,9 +570,9 @@ function montarAgenda(root, lista, o = {}) {
     for (let i = 1; i <= n; i++) { const iso = `${st.y}-${p2(st.m + 1)}-${p2(i)}`;
       cel += `<button class="dia${iso === isoData(hj) ? " hoje" : ""}${iso === st.sel ? " sel" : ""}" data-dia="${iso}">${i}${cont[iso] ? `<em>${cont[iso]}</em>` : ""}</button>`; }
     const doDia = lista.filter(d => d.deliveryDate === st.sel).sort(porHora);
-    root.innerHTML = `<div class="cal"><div class="calh"><button data-mes="-1" aria-label="Mês anterior">‹</button><b>${MESES[st.m]} ${st.y}</b><button data-mes="1" aria-label="Próximo mês">›</button></div>
+    root.innerHTML = `<div class="cal"><div class="calh"><button data-mes="-1" aria-label="Mês anterior">‹</button><span class="calt"><b>${MESES[st.m]} ${st.y}</b><button class="hojeb" data-hoje type="button">Hoje</button></span><button data-mes="1" aria-label="Próximo mês">›</button></div>
     <div class="sem">${[..."DSTQQSS"].map(x => `<span>${x}</span>`).join("")}</div><div class="grade">${cel}</div></div>
-    <p class="resdia"><b>${fmtData(st.sel)}</b> — ${doDia.length} registro(s)</p>
+    <p class="resdia"><b>${fmtData(st.sel)}</b> — ${doDia.length} registro(s) ${chipsDoDia(doDia)}</p>
     <div class="row">${o.onNova ? '<button class="btn pri" data-nova>＋ Nova entrega</button>' : ""}${doDia.length ? '<button class="btn vd" data-rel>📤 Relatório do dia</button>' : ""}</div>
     ${doDia.map(cartao).join("") || '<p class="vazio">Nenhuma entrega neste dia.</p>'}`;
     miniaturas(root);
@@ -486,7 +580,8 @@ function montarAgenda(root, lista, o = {}) {
   root.onclick = ev => {
     if (acaoCartao(ev, lista, draw)) return;
     const t = ev.target.closest("button"); if (!t) return;
-    if (t.dataset.mes) { st.m += +t.dataset.mes; if (st.m < 0) { st.m = 11; st.y--; } if (st.m > 11) { st.m = 0; st.y++; } draw(); }
+    if ("hoje" in t.dataset) { st.y = hj.getFullYear(); st.m = hj.getMonth(); st.sel = isoData(hj); draw(); }
+    else if (t.dataset.mes) { st.m += +t.dataset.mes; if (st.m < 0) { st.m = 11; st.y--; } if (st.m > 11) { st.m = 0; st.y++; } draw(); }
     else if (t.dataset.dia) { st.sel = t.dataset.dia; draw(); }
     else if ("nova" in t.dataset) o.onNova(st.sel);
     else if ("rel" in t.dataset) { const l = lista.filter(d => d.deliveryDate === st.sel).sort(porHora); compartilharDia(l, st.sel, l[0].employeeNameSnapshot); }
@@ -500,7 +595,7 @@ function montarResumo(root, lista) {
     const noMes = lista.filter(d => d.deliveryDate.startsWith(mes)), noDia = lista.filter(d => d.deliveryDate === dia);
     const [y, m] = mes.split("-").map(Number), n = new Date(y, m, 0).getDate(), dec = (y === hj.getFullYear() && m === hj.getMonth() + 1) ? hj.getDate() : n;
     const por = Array.from({length: n}, (_, i) => noMes.filter(d => d.deliveryDate === `${mes}-${p2(i + 1)}`).length), max = Math.max(1, ...por);
-    root.innerHTML = `<h2>Resumo</h2><label>Dia<input type="date" id="r-d" value="${dia}"></label><label>Mês<input type="month" id="r-m" value="${mes}"></label>
+    root.innerHTML = `<h2>Resumo</h2><div class="row"><label>Dia<input type="date" id="r-d" value="${dia}"></label><label>Mês<input type="month" id="r-m" value="${mes}"></label></div>
     <div class="kpis"><div class="kpi"><b>${noDia.length}</b>Registros no dia</div><div class="kpi"><b>${noMes.length}</b>Registros no mês</div>
     <div class="kpi"><b>${noDia.filter(d => d.deliveryType === "standard").length}</b>Padrão (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "special").length}</b>Especiais (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "pickup").length}</b>Coletas (dia)</div><div class="kpi"><b>${noDia.filter(d => d.deliveryType === "return").length}</b>Devoluções (dia)</div>
     <div class="kpi"><b>${(noMes.length / dec).toFixed(1).replace(".", ",")}</b>Média diária (mês)</div></div>
@@ -529,17 +624,18 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
   const nomePadrao = () => tipo === "special" ? "Entrega Especial" : `${NOME[tipo]} ${lista.filter(d => d.deliveryType === tipo && d.deliveryDate === isoData(new Date())).length + 1}`;
   let nome = nomePadrao();
   const draw = () => {
+    pararMic();
     const e = tipo === "special", c = tipo === "pickup", r = tipo === "return", alvo = r ? "devolução" : c ? "coleta" : "entrega";
     s.innerHTML = `<div class="tabs"><button data-t="standard" class="${tipo === "standard" ? "on" : ""}">Entrega Padrão</button><button data-t="pickup" class="${c ? "on c" : ""}">Coleta</button><button data-t="return" class="${r ? "on d" : ""}">Devolução</button><button data-t="special" class="${e ? "on e" : ""}">Entrega Especial</button></div>
     ${e ? '<p class="aviso"><b>ENTREGA ESPECIAL — REGISTRO RETROATIVO.</b> Para entregas já realizadas e não registradas na hora. Data e horário abaixo são informados por você; o instante real do registro é guardado separadamente.</p>'
       : c ? '<p class="aviso ro"><b>COLETA.</b> Data, horário e localização serão capturados automaticamente ao salvar.</p>'
       : r ? '<p class="aviso vi"><b>DEVOLUÇÃO.</b> Fotografe o produto devolvido e informe o vendedor. Data, horário e localização são capturados automaticamente ao salvar.</p>'
       : '<p class="aviso az">Data, horário e localização serão capturados automaticamente ao salvar.</p>'}
-    <label>Nome ${r ? "da devolução" : c ? "da coleta" : "da entrega"}<input id="n-nome" value="${esc(nome)}"${r ? ' placeholder="Ex.: Devolução Sul Diesel"' : ""}></label>
-    ${r ? `<label>Vendedor (quem vendeu a peça) *<input id="n-vend" value="${esc(vend)}" placeholder="Nome do vendedor" autocomplete="off"></label>
-    <label>Motivo / descrição (o que aconteceu)<textarea id="n-obs" rows="3" placeholder="Ex.: Cliente não quis a peça / peça veio errada">${esc(obs)}</textarea></label>` : ""}
+    <label>Nome ${r ? "da devolução" : c ? "da coleta" : "da entrega"}${campoMic(`<input id="n-nome" value="${esc(nome)}" placeholder="${r ? "Ex.: Devolução Sul Diesel" : "Nome do estabelecimento"}" autocomplete="off">`, "n-nome", "titulo")}</label>
+    ${r ? `<label>Vendedor (quem vendeu a peça) *${campoMic(`<input id="n-vend" value="${esc(vend)}" placeholder="Nome do vendedor" autocomplete="off">`, "n-vend", "titulo")}</label>
+    <label>Motivo / descrição (o que aconteceu)${campoMic(`<textarea id="n-obs" rows="3" placeholder="Ex.: Cliente não quis a peça / peça veio errada">${esc(obs)}</textarea>`, "n-obs", "frase")}</label>` : ""}
     ${e ? `<label>Data da ocorrência<input type="date" id="n-data" value="${dataOc}"></label><label>Horário<input type="time" id="n-hora" value="${hora}"></label>
-    <label>Observações (opcional)<textarea id="n-obs" rows="2">${esc(obs)}</textarea></label>` : ""}
+    <label>Observações (opcional)${campoMic(`<textarea id="n-obs" rows="2">${esc(obs)}</textarea>`, "n-obs", "frase")}</label>` : ""}
     <label class="btn" for="f-cam">📷 ${arquivo ? "Tirar outra fotografia" : r ? "Fotografar o produto devolvido" : "Tirar fotografia"}</label>
     <input type="file" id="f-cam" accept="image/*" capture="environment" hidden>
     ${e ? '<label class="btn" for="f-gal">🖼 Escolher da galeria</label><input type="file" id="f-gal" accept="image/*" hidden>' : ""}
@@ -551,6 +647,7 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
     s.querySelectorAll("input[type=file]").forEach(i => i.onchange = () => { guardar(); if (i.files[0]) { arquivo = i.files[0]; msg = ""; draw(); } });
     s.querySelector("#n-cancel").onclick = fecharModal;
     s.querySelector("#n-salvar").onclick = salvar;
+    ligarMics(s, {"n-nome": nomePadrao});             // microfone: ao falar, o nome automático ("Entrega 2") é substituído
   };
   function guardar() {
     nome = s.querySelector("#n-nome").value;
@@ -582,6 +679,7 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
         catch { throw new Error("Sem internet e não foi possível guardar no aparelho (armazenamento indisponível)."); }
       }
       fecharModal(); await aoSalvar();
+      try { navigator.vibrate?.(local ? [30, 60, 30] : 40); } catch {}   // vibração curta de confirmação (Android)
       const rot = e ? "Entrega especial" : c ? "Coleta" : r ? "Devolução" : "Entrega";
       if (local) { toast(rot + " guardada NO APARELHO (sem internet). Ainda NÃO está na nuvem: será enviada sozinha quando a conexão voltar.", "warn"); return; }
       toast(e ? "Entrega especial registrada com sucesso! Os dados informados foram salvos." + (loc ? " A localização do momento do registro também." : "")
@@ -594,8 +692,10 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
 // ===================== 8. AJUSTES E ADMINISTRADOR (sob demanda) =====================
 function montarAjustes(root) {                     // não faz nenhuma consulta ao banco
   root.onclick = null; painelVoltar = null;
-  root.innerHTML = `<h2>Ajustes</h2><div class="box"><b>${esc(perfil.nome)}</b><br>${esc(perfil.email)}<br><span class="mut">${esc(perfil.empresa)}</span></div>
+  root.innerHTML = `<h2>Ajustes</h2><div class="box perfil"><span class="av">${esc((perfil.nome || "?").trim().charAt(0).toUpperCase())}</span><div><b>${esc(perfil.nome)}</b><br><span class="mut peq">${esc(perfil.email)}</span><br><span class="mut peq">${esc(perfil.empresa)}</span></div></div>
+  ${instalarEvt ? '<button class="btn pri" id="aj-inst">📲 Instalar aplicativo no celular</button>' : ""}
   <button class="btn" id="aj-adm">🛡 Administrador</button><button class="btn red" id="aj-sair">Sair da conta</button>`;
+  const inst = root.querySelector("#aj-inst"); if (inst) inst.onclick = async () => { try { await instalarEvt.prompt(); } catch {} instalarEvt = null; montarAjustes(root); };
   root.querySelector("#aj-adm").onclick = () => pedirSenhaAdmin(root);
   root.querySelector("#aj-sair").onclick = sairDaConta;
 }
@@ -689,7 +789,7 @@ function historico() {
     $("#h-lst").innerHTML = `<p class="mut peq">${l.length} registro(s), mais recentes primeiro (pela data da ocorrência)</p>` + (l.map(cartao).join("") || '<p class="vazio">Nada encontrado.</p>');
     miniaturas($("#h-lst"));
   };
-  r.innerHTML = `<h2>Histórico</h2><label>Buscar pelo nome ou vendedor<input id="h-q" type="search"></label>
+  r.innerHTML = `<h2>Histórico</h2><label>Buscar pelo nome ou vendedor${campoMic('<input id="h-q" type="search" autocomplete="off">', "h-q", "")}</label>
   <label>Tipo<select id="h-t"><option value="">Todos</option><option value="standard">Entrega Padrão</option><option value="pickup">Coleta</option><option value="return">Devolução</option><option value="special">Entrega Especial</option></select></label>
   <div class="row"><label style="flex:1">De<input type="date" id="h-de"></label><label style="flex:1">Até<input type="date" id="h-ate"></label></div><div id="h-lst"></div>`;
   r.querySelector("#h-q").oninput = e => { f.q = e.target.value; draw(); };
@@ -697,6 +797,7 @@ function historico() {
   r.querySelector("#h-de").onchange = e => { f.de = e.target.value; draw(); };
   r.querySelector("#h-ate").onchange = e => { f.ate = e.target.value; draw(); };
   r.onclick = e => acaoCartao(e, lista, draw);
+  ligarMics(r);
   draw();
 }
 
@@ -711,7 +812,7 @@ async function iniciar(u) {
   }
   if (!p) { toast("Perfil não encontrado. Fale com o administrador.", "err"); await sair(); return; }
   if (!copia) idb.put("cache", {k: "perfil:" + u.uid, v: JSON.stringify({uid: p.uid, nome: p.nome, email: p.email, empresa: p.empresa, role: p.role})}).catch(() => {});
-  perfil = p; $("#quem").textContent = `${perfil.nome} · ${perfil.empresa}`;
+  perfil = p; $("#quem").innerHTML = `<b>${esc(perfil.nome)}</b><small>${esc(perfil.empresa)}</small>`;
   pilhaTabs = ["agenda"]; mostrar("app"); lista = await carregarLista(perfil); irPara("agenda"); atualizarRede(); sincronizar();
 }
 

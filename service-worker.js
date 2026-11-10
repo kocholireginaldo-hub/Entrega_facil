@@ -1,5 +1,5 @@
 // Troque o número da versão sempre que publicar uma atualização importante.
-const V = "entrega-facil-v7";
+const V = "entrega-facil-v8";
 const ARQ = ["./", "index.html", "manifest.json", "icon-192.png"];
 const SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const SDK_ENTRADAS = ["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"];
@@ -21,6 +21,8 @@ self.addEventListener("install", e => {
   })());
   self.skipWaiting();
 });
+// A página pede para (re)guardar as bibliotecas do Firebase depois de carregá-las: garante o app aberto offline mesmo se a instalação inicial falhou.
+self.addEventListener("message", e => { if (e.data === "guardar-sdk") e.waitUntil((async () => { const c = await caches.open(V), vistos = new Set(); for (const f of SDK_ENTRADAS) await guardarSdk(c, SDK + f, vistos).catch(() => {}); })()); });
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);

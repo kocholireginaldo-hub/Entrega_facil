@@ -107,6 +107,11 @@ dl{margin:0}dt{font-size:12px;color:var(--mut);margin-top:10px;font-weight:700}d
 .row>label{flex:1 1 0;min-width:0}.row>label input{min-width:0}
 input[type=date],input[type=time],input[type=month]{min-width:0;font-size:15px;padding-left:12px;padding-right:10px}
 #v-res .kpis .kpi:nth-child(4) b{color:#b45309}#v-res .kpis .kpi:nth-child(5) b{color:var(--ro)}#v-res .kpis .kpi:nth-child(6) b{color:var(--vi)}
+
+.gps{font-size:13px;font-weight:700;border-radius:14px;padding:9px 12px;margin:10px 0;background:#f1f5f9;color:#475569}
+.gps.ok{background:var(--vd2);color:#166534}.gps.med{background:var(--am2);color:#92400e}.gps.fraco,.gps.erro{background:#fde8e8;color:#991b1b}
+#gps-dec{background:var(--am2);border:1.5px solid var(--am);border-radius:16px;padding:12px;margin:10px 0}#gps-dec p{margin:0 0 6px;font-size:14px}
+.ocupado .tabs,.ocupado label.btn,.ocupado .mic{pointer-events:none;opacity:.55}
 @keyframes subir{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes subirsheet{from{transform:translateY(36px);opacity:.6}to{transform:none;opacity:1}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
@@ -187,7 +192,7 @@ let tt;
 function toast(m, tipo = "ok") { const t = $("#toast"); t.textContent = m; t.className = "show " + tipo; clearTimeout(tt); tt = setTimeout(() => t.className = "", 5500); }
 let modalAoVoltar = null;                          // o que fazer se o usuário tocar em "voltar" com este modal aberto
 function abrirModal(html) { const m = $("#modal"); m.innerHTML = `<div class="sheet">${html}</div>`; m.hidden = false; modalAoVoltar = null; return m.firstChild; }
-function fecharModal() { pararMic(); const m = $("#modal"); m.hidden = true; m.innerHTML = ""; modalAoVoltar = null; }
+function fecharModal() { pararMic(); if (gpsParar) gpsParar(); const m = $("#modal"); m.hidden = true; m.innerHTML = ""; modalAoVoltar = null; }
 function confirmar(msg, botao) {
   return new Promise(res => {
     const s = abrirModal(`<p>${esc(msg)}</p><div class="row"><button class="btn" data-r="0">Cancelar</button><button class="btn red" data-r="1">${esc(botao)}</button></div>`);
@@ -201,6 +206,7 @@ function confirmar(msg, botao) {
 // Onde não existe, o botão avisa e o usuário pode usar o microfone do próprio teclado do celular.
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const ICONE_MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>';
+let gpsParar = null;                               // desliga o "aquecimento" do GPS ao fechar a janela
 let micAtivo = null;                               // {btn, parar()} do microfone que está ouvindo agora
 function pararMic() { if (micAtivo) micAtivo.parar(); }
 const MIC_CONECT = new Set(["de", "do", "da", "dos", "das", "e", "em", "no", "na"]);
@@ -263,10 +269,20 @@ async function iniciarFirebase() {   // carregado dinamicamente: se a CDN falhar
   const [appM, authM, fsM] = await Promise.all([import(B + "firebase-app.js"), import(B + "firebase-auth.js"), import(B + "firebase-firestore.js")]);
   const app = appM.initializeApp(FIREBASE_CONFIG);
   A = authM; F = fsM; auth = A.getAuth(app); db = F.getFirestore(app);
+  try { navigator.serviceWorker?.ready.then(r => r.active?.postMessage("guardar-sdk")); } catch {}   // garante as bibliotecas no cache para abrir offline
 }
 const exigir = () => { if (!auth || !db) throw new Error("Firebase indisponível. Verifique a configuração e a conexão e recarregue a página."); };
 const comTempo = (p, ms, msg) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(Object.assign(new Error(msg), {rede: true})), ms))]);
 // Falha de conexão (e não de permissão/regra): é o caso em que o registro vai para a fila local.
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+// id próprio (não depende do Firebase estar carregado): 20 caracteres, no mesmo formato dos ids do Firestore
+const novoId = () => { const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"; return Array.from(crypto.getRandomValues(new Uint8Array(20)), x => A[x % 62]).join(""); };
+// Teste rápido de internet DE VERDADE (o aviso "online" do navegador engana com sinal fraco): responde em, no máximo, 3 segundos.
+async function temInternet(ms = 3000) {
+  if (!navigator.onLine) return false;
+  const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
+  try { await fetch("https://www.gstatic.com/generate_204", {mode: "no-cors", cache: "no-store", signal: c.signal}); return true; } catch { return false; } finally { clearTimeout(t); }
+}
 const ehRede = e => !!e?.rede || ["unavailable", "network-request-failed", "deadline-exceeded"].includes(e?.code) || /offline|network|failed to fetch/i.test(e?.message || "");
 
 // ===================== 3. AUTENTICAÇÃO =====================
@@ -371,13 +387,12 @@ async function fotoParaDataUrl(file) {
   throw new Error("Não foi possível reduzir a foto o suficiente. Tente outra imagem.");
 }
 // Entrega + foto são gravadas juntas (lote atômico): ou ficam as duas, ou nenhuma. O id é gerado antes, para a fila offline não duplicar.
-const novoId = () => F.doc(colEntregas()).id;
 async function gravarEntrega(id, p, dados, photoData) {
   exigir(); const b = F.writeBatch(db);
   b.set(F.doc(db, "deliveries", id), {userId: p.uid, employeeNameSnapshot: p.nome, employeeEmailSnapshot: p.email, companySnapshot: p.empresa,
     ...dados, hasPhoto: true, photoContentType: "image/jpeg", createdAt: F.serverTimestamp()});
   b.set(F.doc(db, "photos", id), {userId: p.uid, photoData, createdAt: F.serverTimestamp()});
-  await comTempo(b.commit(), 20000, "Tempo esgotado: o registro NÃO foi confirmado na nuvem.");
+  await comTempo(b.commit(), 15000, "Tempo esgotado: o registro NÃO foi confirmado na nuvem.");
   fotos.set(id, Promise.resolve(photoData));
   ofAlimentar(id, p, dados);   // base inteligente de oficinas: em segundo plano, nunca bloqueia nem falha o salvamento
 }
@@ -403,32 +418,40 @@ const idb = (() => {
   return {put: (l, v) => tx(l, "readwrite", s => s.put(v)), del: (l, k) => tx(l, "readwrite", s => s.delete(k)), get: (l, k) => tx(l, "readonly", s => s.get(k)), todos: l => tx(l, "readonly", s => s.getAll())};
 })();
 const pendentesDe = async uid => { try { return (await idb.todos("pend")).filter(p => p.perfil.uid === uid); } catch { return []; } };
-const itemParaLista = p => ({id: p.id, userId: p.perfil.uid, employeeNameSnapshot: p.perfil.nome, employeeEmailSnapshot: p.perfil.email, companySnapshot: p.perfil.empresa, ...p.dados, hasPhoto: true, pendente: true});
+const itemParaLista = p => ({id: p.id, userId: p.perfil.uid, employeeNameSnapshot: p.perfil.nome, employeeEmailSnapshot: p.perfil.email, companySnapshot: p.perfil.empresa, ...p.dados, hasPhoto: true, pendente: true, erroEnvio: p.erro || null});
 // Timestamps do Firestore não sobrevivem ao JSON: guardam-se como milissegundos e voltam com toDate().
 const paraJson = v => JSON.stringify(v, function (k, x) { const o = this[k]; return o && typeof o.toDate === "function" ? {__ts: o.toDate().getTime()} : x; });
 const deJson = t => JSON.parse(t, (k, x) => x && x.__ts !== undefined ? {toDate: () => new Date(x.__ts)} : x);
 let dadosLocais = false, sincronizando = false;
 
-async function carregarLista(p) {                  // servidor; se não houver conexão, a cópia local; sempre soma os pendentes
-  let srv; dadosLocais = false;
+const salvosNaSessao = new Map();                  // registros confirmados na nuvem nesta sessão: não "somem" se a lista vier da cópia do aparelho
+async function listaLocal(p) {                     // só o que está no aparelho (sem rede): cópia da lista + pendentes
+  const c = await idb.get("cache", "lista:" + p.uid).catch(() => null), srv = c ? deJson(c.v) : [];
+  const pend = await pendentesDe(p.uid); pend.forEach(x => fotos.set(x.id, Promise.resolve(x.photoData)));
+  return [...srv.filter(d => !pend.some(x => x.id === d.id)), ...pend.map(itemParaLista)];
+}
+async function carregarLista(p) {                  // nuvem; se não houver internet de verdade, a cópia do aparelho; sempre soma os pendentes
+  let srv, fresco = false; dadosLocais = false;
   try {
-    if (!navigator.onLine) throw Object.assign(new Error("offline"), {rede: true});
-    srv = await comTempo(listarMinhas(p.uid), 15000, "Tempo esgotado ao carregar os registros.");
+    if (!db || !(await temInternet(2500))) throw Object.assign(new Error("offline"), {rede: true});     // sem internet: nem espera o Firebase
+    srv = await comTempo(listarMinhas(p.uid), 12000, "Tempo esgotado ao carregar os registros."); fresco = true;
     idb.put("cache", {k: "lista:" + p.uid, v: paraJson(srv)}).catch(() => {});
   } catch (e) {
     if (!ehRede(e)) throw e;
     const c = await idb.get("cache", "lista:" + p.uid).catch(() => null); srv = c ? deJson(c.v) : []; dadosLocais = true;
   }
   const pend = await pendentesDe(p.uid); pend.forEach(x => fotos.set(x.id, Promise.resolve(x.photoData)));
-  return [...srv.filter(d => !pend.some(x => x.id === d.id)), ...pend.map(itemParaLista)];
+  if (fresco) srv.forEach(d => salvosNaSessao.delete(d.id));
+  const extras = [...salvosNaSessao.values()].filter(x => x.userId === p.uid && !srv.some(d => d.id === x.id) && !pend.some(d => d.id === x.id));
+  return [...srv.filter(d => !pend.some(x => x.id === d.id)), ...extras, ...pend.map(itemParaLista)];
 }
 function atualizarRede() {
-  const el = $("#net"), n = lista.filter(d => d.pendente).length, on = navigator.onLine;
-  if (on && !n && !dadosLocais) { el.hidden = true; return; }
-  el.className = on ? "" : "off"; el.hidden = false;
+  const el = $("#net"), pend = lista.filter(d => d.pendente), n = pend.length, nErro = pend.filter(d => d.erroEnvio).length, on = navigator.onLine;
+  if (on && !n && !dadosLocais && db) { el.hidden = true; return; }
+  el.className = on && !nErro ? "" : "off"; el.hidden = false;
   el.innerHTML = !on ? `<span>📴 Sem internet${n ? ` — ${n} registro(s) guardado(s) no aparelho` : ". Novos registros ficam guardados no aparelho."}</span>`
-    : `<span>${sincronizando ? "⏳ Enviando…" : n ? `⏳ ${n} registro(s) aguardando envio` : "⚠️ Mostrando dados salvos no aparelho"}</span><button id="net-env">${n ? "Enviar agora" : "Atualizar"}</button>`;
-  const b = el.querySelector("#net-env"); if (b) b.onclick = async () => { await sincronizar(); if (dadosLocais) recarregar().catch(() => {}); };
+    : `<span>${sincronizando ? "⏳ Enviando…" : nErro ? `⚠️ ${nErro} registro(s) não enviado(s): veja o motivo no cartão` : n ? `⏳ ${n} registro(s) aguardando envio` : !db ? "⚠️ Conectando ao Firebase…" : "⚠️ Mostrando dados salvos no aparelho"}</span><button id="net-env">${n ? (nErro ? "Tentar de novo" : "Enviar agora") : "Atualizar"}</button>`;
+  const b = el.querySelector("#net-env"); if (b) b.onclick = async () => { await sincronizar(true); if (dadosLocais) recarregar().catch(() => {}); };
 }
 async function enviarPendente(p) {
   try { await gravarEntrega(p.id, p.perfil, p.dados, p.photoData); }
@@ -437,25 +460,58 @@ async function enviarPendente(p) {
     throw e;
   }
 }
-async function sincronizar() {
-  if (sincronizando || !perfil || !auth?.currentUser || !navigator.onLine) return;
-  sincronizando = true; atualizarRede(); let enviados = 0, erros = 0;
+let conectandoFb = null;
+async function garantirFirebase() {                // se o app abriu sem conseguir carregar o Firebase, tenta de novo quando houver internet
+  if (db) return true;
+  if (!conectandoFb) conectandoFb = (async () => {
+    try { await iniciarFirebase(); ligarSessao(); return true; }
+    catch {
+      // O navegador guarda a falha de carregamento do módulo até a página ser recarregada: com a internet de volta e nenhuma janela aberta,
+      // recarrega sozinho (os registros estão guardados no aparelho). No máximo uma vez por minuto.
+      try {
+        const ult = +sessionStorage.getItem("fbReload") || 0;
+        if (configOk() && $("#modal").hidden && Date.now() - ult > 60000 && await temInternet()) { sessionStorage.setItem("fbReload", String(Date.now())); location.reload(); }
+      } catch {}
+      return false;
+    } finally { conectandoFb = null; }
+  })();
+  return conectandoFb;
+}
+async function sincronizar(manual) {
+  if (sincronizando || !perfil) return;
+  if (!(await temInternet())) { if (manual) toast("Sem internet agora. Os registros continuam guardados no aparelho.", "warn"); return; }
+  if (!db && !(await garantirFirebase())) return;
+  if (!auth?.currentUser) return;                  // o login ainda está sendo restaurado: a própria sessão chama a sincronização depois
+  sincronizando = true; atualizarRede(); let enviados = 0, falhas = 0;
   try {
     for (const p of (await pendentesDe(perfil.uid)).sort((a, b) => a.queuedAt - b.queuedAt)) {
+      if (!manual && p.prox && p.prox > Date.now()) continue;        // falhou antes: espera um pouco (tentativas automáticas espaçadas)
       try { await enviarPendente(p); await idb.del("pend", p.id); enviados++; }
-      catch (e) { if (ehRede(e)) break; erros++; toast("Não foi possível enviar um registro guardado: " + msgErro(e), "err"); }
+      catch (e) {
+        if (ehRede(e)) break;                      // a conexão caiu de novo: tenta mais tarde, sem alarde
+        falhas++; p.tentativas = (p.tentativas || 0) + 1; p.erro = msgErro(e); p.prox = Date.now() + Math.min(1800000, 30000 * 2 ** p.tentativas);
+        await idb.put("pend", p).catch(() => {});  // o motivo aparece no cartão; o registro continua guardado
+      }
     }
   } finally { sincronizando = false; }
-  if (enviados) { toast(`${enviados} registro(s) guardado(s) no aparelho foram enviados para a nuvem.`); try { await recarregar(); } catch {} }
-  else atualizarRede();
+  if (enviados) toast(`${enviados} registro(s) guardado(s) no aparelho foram enviados para a nuvem.`);
+  if (falhas && manual) toast("Alguns registros não puderam ser enviados: o motivo aparece em cada cartão.", "err");
+  try { if (enviados || falhas) await recarregar(); else atualizarRede(); } catch {}
 }
-addEventListener("online", () => { atualizarRede(); sincronizar(); });
+let syncAgendado = [];
+function agendarSync() {                           // a conexão "volta" antes de ficar estável: tenta de novo em 0, 3, 10 e 30 segundos
+  syncAgendado.forEach(clearTimeout);
+  syncAgendado = [0, 3000, 10000, 30000].map(ms => setTimeout(() => { if (!db) garantirFirebase(); if (lista.some(d => d.pendente)) sincronizar(); }, ms));
+}
+addEventListener("online", () => { atualizarRede(); agendarSync(); });
 addEventListener("offline", atualizarRede);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) sincronizar(); });
-setInterval(() => { if (lista.some(d => d.pendente)) sincronizar(); }, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) agendarSync(); });
+setInterval(() => { if (!db) garantirFirebase(); else if (lista.some(d => d.pendente)) sincronizar(); }, 60000);
 
 // ===================== 5. COMPARTILHAMENTO =====================
 
+const txtLoc = d => !coordOk(d) ? "Não registrada" : `${d.latitude}, ${d.longitude}${d.accuracyMeters ? ` (precisão ~${d.accuracyMeters} m)` : ""}`
+  + (d.locationConfirmed === true ? ` ✓ confirmada em ${d.locationReadings || 2} leituras` : d.locationConfirmed === false ? ` ⚠ NÃO confirmada${d.locationQuality === "fraca" ? " (precisão fraca)" : ""}` : "");
 const coordOk = d => Number.isFinite(d.latitude) && Number.isFinite(d.longitude) && Math.abs(d.latitude) <= 90 && Math.abs(d.longitude) <= 180;
 const linkMapa = d => coordOk(d) ? `https://www.google.com/maps?q=${d.latitude},${d.longitude}` : null;
 
@@ -470,6 +526,7 @@ function textoEntrega(d, cabecalho = true) {
   if (d.notes) L.push(`${r ? "Motivo" : "Obs."}: ${d.notes}`);
   if (coordOk(d)) L.push(`${e ? "Localização no momento do registro" : "Localização"}: ${d.latitude}, ${d.longitude}${d.accuracyMeters ? ` (precisão ~${d.accuracyMeters} m)` : ""}`, `Google Maps: ${linkMapa(d)}`);
   else L.push("Localização: não registrada");
+  if (coordOk(d) && d.locationConfirmed !== undefined) L.push(d.locationConfirmed ? `Localização confirmada em ${d.locationReadings || 2} leituras` : "ATENÇÃO: localização NÃO confirmada");
   return L.join("\n");
 }
 
@@ -502,10 +559,10 @@ const porHora = (a, b) => (a.deliveryDate + a.deliveryTime).localeCompare(b.deli
 function cartao(d) {
   const e = d.deliveryType === "special", c = d.deliveryType === "pickup", r = d.deliveryType === "return";
   return `<article class="card${e ? " esp" : c ? " col" : r ? " dev" : ""}" data-id="${esc(d.id)}"><img class="th" data-i="${esc(d.id)}" alt="">
-  <div class="inf"><b>${esc(d.deliveryName)}</b>${fmtData(d.deliveryDate)} às ${esc(d.deliveryTime)} ${coordOk(d) ? "📍" : ""}<br>
+  <div class="inf"><b>${esc(d.deliveryName)}</b>${fmtData(d.deliveryDate)} às ${esc(d.deliveryTime)} ${coordOk(d) ? (d.locationConfirmed === false || d.locationQuality === "fraca" ? "📍⚠️" : "📍") : ""}<br>
   ${e ? `<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span><br><span class="mut peq">Registrado em ${esc(fmtCriado(d))}</span>` : c ? '<span class="tag col">Coleta</span>' : r ? '<span class="tag dev">Devolução</span>' : '<span class="tag">Entrega Padrão</span>'}
   ${r && d.vendedor ? `<br><span class="peq"><strong>Vendedor:</strong> ${esc(d.vendedor)}</span>` : ""}
-  ${d.pendente ? '<br><span class="selo" style="background:#b45309;color:#fff">⏳ AGUARDANDO ENVIO</span>' : ""}
+  ${d.pendente ? '<br><span class="selo" style="background:#b45309;color:#fff">⏳ AGUARDANDO ENVIO</span>' : ""}${d.pendente && d.erroEnvio ? `<br><span class="peq err">⚠ Não enviou: ${esc(d.erroEnvio)}</span>` : ""}
   ${d.employeeNameSnapshot ? `<br><span class="mut peq">${esc(d.employeeNameSnapshot)}</span>` : ""}</div>
   <div class="acts"><button data-a="ver">Detalhes</button><button data-a="sh">📤 Compartilhar</button><button data-a="del" class="x" aria-label="Excluir">🗑</button></div></article>`;
 }
@@ -531,13 +588,13 @@ function detalhes(d, lista, depois) {
   const e = d.deliveryType === "special", c = d.deliveryType === "pickup", r = d.deliveryType === "return", reg = d.locationKind === "registro", mapa = linkMapa(d);
   const s = abrirModal(`${e ? '<span class="selo">ENTREGA ESPECIAL — REGISTRO RETROATIVO</span>' : c ? '<span class="tag col">Coleta</span>' : r ? '<span class="tag dev">Devolução</span>' : '<span class="tag">Entrega Padrão</span>'}
   <h2>${esc(d.deliveryName)}</h2><img class="foto" data-i="${esc(d.id)}" alt="Fotografia da entrega">
-  ${d.pendente ? '<p class="aviso">⏳ Este registro está guardado só neste aparelho e ainda não foi enviado à nuvem.</p>' : ""}
+  ${d.pendente ? '<p class="aviso">⏳ Este registro está guardado só neste aparelho e ainda não foi enviado à nuvem.</p>' : ""}${d.pendente && d.erroEnvio ? `<p class="aviso" style="background:#fde8e8;border-color:#dc2626">⚠️ Último erro no envio: ${esc(d.erroEnvio)}</p>` : ""}
   <dl><dt>Entregador</dt><dd>${esc(d.employeeNameSnapshot)}</dd><dt>Empresa</dt><dd>${esc(d.companySnapshot)}</dd>
   <dt>Data e horário ${e ? "informados" : ""}</dt><dd>${fmtData(d.deliveryDate)} às ${esc(d.deliveryTime)}</dd>
   <dt>Instante real do registro</dt><dd>${esc(fmtCriado(d))}</dd>
   ${r ? `<dt>Vendedor</dt><dd>${esc(d.vendedor || "—")}</dd>` : ""}${d.notes ? `<dt>${r ? "Motivo da devolução" : "Observações"}</dt><dd>${esc(d.notes)}</dd>` : ""}
   <dt>${reg ? "Localização no momento do registro" : c ? "Localização da coleta" : r ? "Localização da devolução" : "Localização da entrega"}</dt>
-  <dd>${coordOk(d) ? `${d.latitude}, ${d.longitude}${d.accuracyMeters ? ` (precisão ~${d.accuracyMeters} m)` : ""}` : "Não registrada"}</dd></dl>
+  <dd>${txtLoc(d)}</dd></dl>
   ${reg ? '<p class="aviso">Esta localização corresponde ao momento em que o registro foi criado e não comprova o local da entrega ocorrida antes.</p>' : ""}
   ${mapa ? `<a class="btn" href="${mapa}" target="_blank" rel="noopener">🗺 Ver no Google Maps</a>` : ""}
   <button class="btn vd" data-a="sh">📤 Compartilhar comprovante</button><button class="btn red" data-a="del">🗑 Excluir entrega</button><button class="btn" data-a="fx">Fechar</button>`);
@@ -608,14 +665,36 @@ function montarResumo(root, lista) {
 
 // ===================== 7. NOVA ENTREGA =====================
 
-const posicao = () => new Promise((ok, er) => {
+// ----- GPS com confirmação: duas leituras com 2 segundos de intervalo -----
+// Se as duas concordarem (dentro da tolerância do próprio GPS), a localização é "confirmada". Se a precisão for fraca ou as leituras
+// divergirem, o app lê de novo (até 3 pares) e, no fim, deixa o usuário escolher entre tentar outra vez ou salvar marcando "NÃO confirmada".
+const GPS = {BOA: 30, ACEITA: 100, ESPERA_MS: 2000, PARES: 3, TIMEOUT_MS: 25000};
+const gpsQualidade = m => m <= GPS.BOA ? "boa" : m <= GPS.ACEITA ? "media" : "fraca";
+const gpsMsgErro = c => c === 1 ? "Permissão de localização negada. Permita a localização para este site nas configurações do navegador (iPhone: Ajustes > Privacidade e Segurança > Serviços de Localização > Safari) e tente novamente."
+  : c === 3 ? "Tempo esgotado ao obter a localização. Vá para um local aberto e tente novamente." : "Não foi possível obter a localização.";
+const gpsLer = () => new Promise((ok, er) => {     // leitura nova (maximumAge 0): nunca reaproveita posição antiga
   if (!navigator.geolocation) return er(new Error("Este navegador não oferece localização."));
-  navigator.geolocation.getCurrentPosition(
-    p => ok({latitude: p.coords.latitude, longitude: p.coords.longitude, accuracyMeters: Math.round(p.coords.accuracy)}),
-    e => er(new Error(e.code === 1 ? "Permissão de localização negada. Permita a localização para este site nas configurações do navegador (iPhone: Ajustes > Privacidade e Segurança > Serviços de Localização > Safari) e tente novamente."
-      : e.code === 3 ? "Tempo esgotado ao obter a localização. Vá para um local aberto e tente novamente." : "Não foi possível obter a localização.")),
-    {enableHighAccuracy: true, timeout: 20000, maximumAge: 0});
+  navigator.geolocation.getCurrentPosition(p => ok({lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy)}),
+    e => er(Object.assign(new Error(gpsMsgErro(e.code)), {gps: e.code})), {enableHighAccuracy: true, timeout: GPS.TIMEOUT_MS, maximumAge: 0});
 });
+function gpsVigiar(aoMudar) {                      // "aquece" o GPS e mostra a precisão enquanto a pessoa tira a foto; NÃO vira a posição do registro
+  if (!navigator.geolocation) { aoMudar({erro: "Este navegador não oferece localização."}); return; }
+  if (gpsParar) gpsParar();
+  const id = navigator.geolocation.watchPosition(p => aoMudar({acc: Math.round(p.coords.accuracy)}), e => aoMudar({erro: gpsMsgErro(e.code)}), {enableHighAccuracy: true, maximumAge: 0, timeout: 60000});
+  gpsParar = () => { try { navigator.geolocation.clearWatch(id); } catch {} gpsParar = null; };
+}
+async function gpsConfirmar(aoStatus) {
+  let res = null;
+  for (let i = 1; i <= GPS.PARES; i++) {
+    aoStatus(i === 1 ? "📍 Obtendo localização…" : `📍 Confirmando de novo (${i}/${GPS.PARES})…`);
+    const a = await gpsLer();
+    aoStatus("📍 Confirmando em 2 segundos…"); await esperar(GPS.ESPERA_MS);
+    const b = await gpsLer(), desvio = Math.round(ofDist(a.lat, a.lng, b.lat, b.lng)), m = a.acc <= b.acc ? a : b;
+    res = {latitude: m.lat, longitude: m.lng, accuracyMeters: m.acc, locationConfirmed: desvio <= Math.max(25, a.acc + b.acc) && m.acc <= GPS.ACEITA, locationDriftM: desvio, locationReadings: i * 2, locationQuality: gpsQualidade(m.acc)};
+    if (res.locationConfirmed) return res;
+  }
+  return res;                                      // não confirmou: quem chamou decide (perguntar ao usuário)
+}
 
 function abrirNova(perfil, lista, aoSalvar, dataSel) {
   let tipo = "standard", arquivo = null, obs = "", vend = "", dataOc = dataSel || isoData(new Date()), hora = "08:00", msg = "";
@@ -623,6 +702,13 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
   const NOME = {standard: "Entrega", pickup: "Coleta", return: "Devolução"};
   const nomePadrao = () => tipo === "special" ? "Entrega Especial" : `${NOME[tipo]} ${lista.filter(d => d.deliveryType === tipo && d.deliveryDate === isoData(new Date())).length + 1}`;
   let nome = nomePadrao();
+  let gpsEst = {cls: "", txt: "📍 Buscando GPS…"};
+  const gpsChipHtml = () => `<p class="gps ${gpsEst.cls}" id="gps-st" role="status">${esc(gpsEst.txt)}</p>`;
+  const vigiar = () => gpsVigiar(x => {
+    gpsEst = x.erro ? {cls: "erro", txt: "📍 " + x.erro} : {cls: x.acc <= GPS.BOA ? "ok" : x.acc <= GPS.ACEITA ? "med" : "fraco", txt: `📍 GPS ±${x.acc} m — ${x.acc <= GPS.BOA ? "bom" : x.acc <= GPS.ACEITA ? "razoável" : "fraco (vá para um local aberto)"}`};
+    const el = s.querySelector("#gps-st"); if (el) { el.className = "gps " + gpsEst.cls; el.textContent = gpsEst.txt; }
+  });
+  vigiar();
   const draw = () => {
     pararMic();
     const e = tipo === "special", c = tipo === "pickup", r = tipo === "return", alvo = r ? "devolução" : c ? "coleta" : "entrega";
@@ -631,6 +717,7 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
       : c ? '<p class="aviso ro"><b>COLETA.</b> Data, horário e localização serão capturados automaticamente ao salvar.</p>'
       : r ? '<p class="aviso vi"><b>DEVOLUÇÃO.</b> Fotografe o produto devolvido e informe o vendedor. Data, horário e localização são capturados automaticamente ao salvar.</p>'
       : '<p class="aviso az">Data, horário e localização serão capturados automaticamente ao salvar.</p>'}
+    ${gpsChipHtml()}
     <label>Nome ${r ? "da devolução" : c ? "da coleta" : "da entrega"}${campoMic(`<input id="n-nome" value="${esc(nome)}" placeholder="${r ? "Ex.: Devolução Sul Diesel" : "Nome do estabelecimento"}" autocomplete="off">`, "n-nome", "titulo")}</label>
     ${r ? `<label>Vendedor (quem vendeu a peça) *${campoMic(`<input id="n-vend" value="${esc(vend)}" placeholder="Nome do vendedor" autocomplete="off">`, "n-vend", "titulo")}</label>
     <label>Motivo / descrição (o que aconteceu)${campoMic(`<textarea id="n-obs" rows="3" placeholder="Ex.: Cliente não quis a peça / peça veio errada">${esc(obs)}</textarea>`, "n-obs", "frase")}</label>` : ""}
@@ -640,6 +727,7 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
     <input type="file" id="f-cam" accept="image/*" capture="environment" hidden>
     ${e ? '<label class="btn" for="f-gal">🖼 Escolher da galeria</label><input type="file" id="f-gal" accept="image/*" hidden>' : ""}
     ${arquivo ? '<img class="prev" id="prev" alt="Prévia">' : '<p class="mut peq">A fotografia é obrigatória.</p>'}
+    <div id="gps-dec" hidden></div>
     <p class="err" id="n-err">${esc(msg)}</p>
     <button class="btn pri" id="n-salvar">Salvar ${alvo}</button><button class="btn" id="n-cancel">Cancelar</button>`;
     if (arquivo) s.querySelector("#prev").src = URL.createObjectURL(arquivo);
@@ -656,35 +744,57 @@ function abrirNova(perfil, lista, aoSalvar, dataSel) {
   }
   async function salvar() {
     guardar(); const e = tipo === "special", c = tipo === "pickup", r = tipo === "return", alvo = r ? "devolução" : c ? "coleta" : "entrega";
-    const btn = s.querySelector("#n-salvar"), er = s.querySelector("#n-err");
-    const falha = m => { msg = m; er.textContent = m; btn.disabled = false; btn.textContent = "Salvar " + alvo; };
+    const btn = s.querySelector("#n-salvar"), er = s.querySelector("#n-err"), dec = s.querySelector("#gps-dec");
+    const falha = m => { msg = m; er.textContent = m; btn.disabled = false; btn.textContent = "Salvar " + alvo; s.classList.remove("ocupado"); vigiar(); };
     if (!nome.trim()) return falha(`Informe o nome da ${alvo}.`);
     if (r && !vend.trim()) return falha("Informe o nome do vendedor.");
     if (!arquivo) return falha("A fotografia é obrigatória.");
     if (e && (!dataOc || !hora)) return falha("Informe a data e o horário da ocorrência.");
-    btn.disabled = true; btn.textContent = "Obtendo localização e salvando…"; er.textContent = "";
+    btn.disabled = true; er.textContent = ""; s.classList.add("ocupado");
+    const agora = new Date();                       // o horário do registro é o do toque em Salvar (não o fim da espera do GPS)
+    const decidirLocal = loc => new Promise(res => {   // precisão fraca ou leituras que não bateram: o usuário escolhe
+      const q = loc.locationQuality === "fraca" ? `Precisão fraca (±${loc.accuracyMeters} m)` : `As duas leituras não bateram (diferença de ${loc.locationDriftM} m)`;
+      vigiar(); btn.textContent = "Aguardando sua escolha…"; dec.hidden = false; try { dec.scrollIntoView({block: "center", behavior: "smooth"}); } catch {}       // o chip volta a mostrar a precisão enquanto a pessoa decide
+      dec.innerHTML = `<p><b>📍 ${q}.</b> Vá para um local aberto e tente de novo, ou salve assim mesmo (o registro ficará marcado como localização NÃO confirmada).</p><div class="row"><button type="button" class="btn" data-g="t">Tentar de novo</button><button type="button" class="btn vd" data-g="s">Salvar assim mesmo</button></div>`;
+      dec.onclick = ev => { const b = ev.target.closest("[data-g]"); if (b) { dec.hidden = true; dec.innerHTML = ""; res(b.dataset.g); } };
+    });
+    let loc = null, local = false, item, photoData;
     try {
-      let loc = null;
-      try { loc = await posicao(); } catch (x) { if (!e) throw x; toast(x.message + " O registro especial será salvo sem localização.", "warn"); }
-      const agora = new Date();
+      for (;;) {                                   // 1) localização confirmada (o monitoramento para: a leitura de confirmação é separada)
+        if (gpsParar) gpsParar();
+        try { loc = await gpsConfirmar(t => { btn.textContent = t; }); }
+        catch (x) { if (!e) throw x; toast(x.message + " O registro especial será salvo sem localização.", "warn"); loc = null; break; }
+        if (!s.isConnected) return;                // a pessoa fechou a janela enquanto esperava: nada é salvo
+        if (e || (loc.locationConfirmed && loc.locationQuality !== "fraca")) break;
+        if (await decidirLocal(loc) === "s") break;
+        if (!s.isConnected) return;
+      }
+      btn.textContent = "Salvando…";               // 2) dados do registro
       const dados = {deliveryName: nome.trim(), deliveryType: tipo, deviceCreatedAt: agora, notes: (e || r) ? obs.trim() : "", ...(r ? {vendedor: vend.trim()} : {}),
         deliveryDate: e ? dataOc : isoData(agora), deliveryTime: e ? hora : horaHM(agora), occurredAt: e ? new Date(`${dataOc}T${hora}`) : agora,
-        latitude: loc?.latitude ?? null, longitude: loc?.longitude ?? null, accuracyMeters: loc?.accuracyMeters ?? null, locationKind: loc ? (e ? "registro" : "entrega") : null};
-      const photoData = await fotoParaDataUrl(arquivo), id = novoId();
+        latitude: loc?.latitude ?? null, longitude: loc?.longitude ?? null, accuracyMeters: loc?.accuracyMeters ?? null,
+        ...(loc ? {locationConfirmed: loc.locationConfirmed, locationQuality: loc.locationQuality, locationReadings: loc.locationReadings, locationDriftM: loc.locationDriftM} : {}),
+        locationKind: loc ? (e ? "registro" : "entrega") : null};
+      photoData = await fotoParaDataUrl(arquivo); const id = novoId();
       const snap = {uid: perfil.uid, nome: perfil.nome, email: perfil.email, empresa: perfil.empresa};
-      let local = !navigator.onLine;                // sem internet: vai direto para a fila do aparelho
+      local = !(await temInternet());               // 3) sem internet de verdade: guarda no aparelho na hora, sem esperar timeout
       if (!local) { try { await gravarEntrega(id, snap, dados, photoData); } catch (x) { if (!ehRede(x)) throw x; local = true; } }
       if (local) {
-        try { await idb.put("pend", {id, queuedAt: Date.now(), perfil: snap, dados: {...dados, registradoOffline: true}, photoData}); }
+        try { await idb.put("pend", {id, queuedAt: Date.now(), perfil: snap, dados: {...dados, registradoOffline: true}, photoData, tentativas: 0}); }
         catch { throw new Error("Sem internet e não foi possível guardar no aparelho (armazenamento indisponível)."); }
       }
-      fecharModal(); await aoSalvar();
-      try { navigator.vibrate?.(local ? [30, 60, 30] : 40); } catch {}   // vibração curta de confirmação (Android)
-      const rot = e ? "Entrega especial" : c ? "Coleta" : r ? "Devolução" : "Entrega";
-      if (local) { toast(rot + " guardada NO APARELHO (sem internet). Ainda NÃO está na nuvem: será enviada sozinha quando a conexão voltar.", "warn"); return; }
-      toast(e ? "Entrega especial registrada com sucesso! Os dados informados foram salvos." + (loc ? " A localização do momento do registro também." : "")
-        : `${rot} registrada com sucesso! Fotografia, data, horário e localização foram registrados.`);
-    } catch (x) { falha(msgErro(x) + " O registro NÃO foi confirmado. Você pode tentar novamente."); }
+      item = {id, userId: snap.uid, employeeNameSnapshot: snap.nome, employeeEmailSnapshot: snap.email, companySnapshot: snap.empresa, ...dados, hasPhoto: true, ...(local ? {pendente: true, registradoOffline: true} : {})};
+    } catch (x) { if (!s.isConnected) return; return falha(msgErro(x) + " O registro NÃO foi confirmado. Você pode tentar novamente."); }
+    // A PARTIR DAQUI O REGISTRO JÁ ESTÁ SALVO (nuvem ou aparelho): nada abaixo pode acusar falha nem impedir a confirmação.
+    fotos.set(item.id, Promise.resolve(photoData)); if (!local) salvosNaSessao.set(item.id, item);
+    fecharModal();
+    try { lista.push(item); desenhar(); atualizarRede(); } catch {}
+    Promise.resolve().then(() => aoSalvar()).catch(() => {});      // atualiza a lista pela nuvem em segundo plano
+    try { navigator.vibrate?.(local ? [30, 60, 30] : 40); } catch {}
+    const rot = e ? "Entrega especial" : c ? "Coleta" : r ? "Devolução" : "Entrega";
+    const aviso = loc && (!loc.locationConfirmed || loc.locationQuality === "fraca") ? ` ⚠ Localização NÃO confirmada (precisão ±${loc.accuracyMeters} m).` : loc ? ` 📍 Localização confirmada (±${loc.accuracyMeters} m).` : "";
+    if (local) { toast(rot + " guardada NO APARELHO (sem internet). Ainda NÃO está na nuvem: será enviada sozinha quando a conexão voltar." + aviso, "warn"); return; }
+    toast((e ? "Entrega especial registrada com sucesso! Os dados informados foram salvos." : `${rot} registrada com sucesso! Fotografia, data, horário e localização foram registrados.`) + aviso, aviso.includes("⚠") ? "warn" : "ok");
   }
   draw();
 }
@@ -703,6 +813,7 @@ async function sairDaConta() {
   const n = lista.filter(d => d.pendente).length;
   if (n && !await confirmar(`Há ${n} registro(s) guardado(s) só neste aparelho, ainda não enviados à nuvem. Eles continuam guardados e serão enviados quando você entrar de novo com esta conta. Sair mesmo assim?`, "Sair")) return;
   try { await encerrarAdmin(); } catch {}
+  if (!auth) { limparSessaoVisual(); mostrar("auth"); return; }     // o app estava aberto só com os dados do aparelho
   try { await sair(); } catch (e) { toast(msgErro(e), "err"); }
 }
 function pedirSenhaAdmin(root) {
@@ -801,19 +912,38 @@ function historico() {
   draw();
 }
 
+// Cópia da sessão neste aparelho: permite abrir o app e registrar sem internet (mesmo sem conseguir carregar o Firebase).
+const guardarSessao = p => idb.put("cache", {k: "sessao", v: JSON.stringify({perfil: {uid: p.uid, nome: p.nome, email: p.email, empresa: p.empresa, role: p.role}})}).catch(() => {});
+const lerSessao = async () => { try { const c = await idb.get("cache", "sessao"); return c ? JSON.parse(c.v) : null; } catch { return null; } };
+const atualizarQuem = () => { $("#quem").innerHTML = `<b>${esc(perfil.nome)}</b><small>${esc(perfil.empresa)}</small>`; };
+function abrirApp(p) { perfil = p; atualizarQuem(); pilhaTabs = ["agenda"]; mostrar("app"); }
+const pedirArmazenamentoPersistente = () => { try { navigator.storage?.persist?.(); } catch {} };   // evita que o navegador apague a fila guardada
+async function iniciarLocal() {                    // abre o app só com os dados do aparelho (o Firebase ainda não carregou)
+  const ss = await lerSessao(); if (!ss) return false;
+  abrirApp(ss.perfil); lista = await listaLocal(perfil); irPara("agenda"); atualizarRede(); pedirArmazenamentoPersistente(); return true;
+}
 async function iniciar(u) {
+  const jaNoApp = perfil?.uid === u.uid && !$("#app").hidden;
+  const cp = await idb.get("cache", "perfil:" + u.uid).catch(() => null);
+  if (cp && !jaNoApp) { abrirApp(JSON.parse(cp.v)); lista = await listaLocal(perfil); irPara("agenda"); atualizarRede(); }   // abre na hora; a nuvem atualiza em seguida
   let p, copia = false;
-  try { p = await comTempo(carregarPerfil(u.uid), 12000, "Tempo esgotado ao carregar o perfil."); }
-  catch (e) {   // sem conexão: usa a cópia do perfil guardada neste aparelho (só existe depois de um acesso com internet)
-    if (!ehRede(e)) throw e;
-    const c = await idb.get("cache", "perfil:" + u.uid).catch(() => null);
-    if (!c) throw new Error("Sem conexão e sem dados salvos neste aparelho. Conecte-se à internet no primeiro acesso.");
-    p = JSON.parse(c.v); copia = true;
+  if (cp && !(await temInternet(2500))) { p = JSON.parse(cp.v); copia = true; }                                           // sem internet: não espera o Firebase
+  else {
+    try { p = await comTempo(carregarPerfil(u.uid), 12000, "Tempo esgotado ao carregar o perfil."); }
+    catch (e) {
+      if (!ehRede(e)) throw e;
+      if (!cp) throw new Error("Sem conexão e sem dados salvos neste aparelho. Conecte-se à internet no primeiro acesso.");
+      p = JSON.parse(cp.v); copia = true;
+    }
   }
   if (!p) { toast("Perfil não encontrado. Fale com o administrador.", "err"); await sair(); return; }
   if (!copia) idb.put("cache", {k: "perfil:" + u.uid, v: JSON.stringify({uid: p.uid, nome: p.nome, email: p.email, empresa: p.empresa, role: p.role})}).catch(() => {});
-  perfil = p; $("#quem").innerHTML = `<b>${esc(perfil.nome)}</b><small>${esc(perfil.empresa)}</small>`;
-  pilhaTabs = ["agenda"]; mostrar("app"); lista = await carregarLista(perfil); irPara("agenda"); atualizarRede(); sincronizar();
+  guardarSessao(p);
+  const aberto = jaNoApp || !!cp;                  // o app já está na tela?
+  if (aberto) { perfil = p; atualizarQuem(); } else abrirApp(p);
+  lista = await carregarLista(perfil);             // atualiza pela nuvem (ou mantém a cópia do aparelho, se estiver sem rede)
+  if (aberto) desenhar(); else irPara("agenda");
+  atualizarRede(); sincronizar(); pedirArmazenamentoPersistente();
 }
 
 
@@ -1187,21 +1317,33 @@ async function baseOficinas(root, base, falha, voltar) {
 
 // ===================== 9. INICIALIZAÇÃO GERAL =====================
 function limparSessaoVisual() {                   // impede reaproveitar visualmente dados da conta anterior
+  idb.del("cache", "sessao").catch(() => {});      // quem saiu não reabre sozinho no próximo acesso offline (os registros pendentes continuam guardados)
   perfil = null; lista = []; visao = "agenda"; pilhaTabs = ["agenda"]; painelVoltar = null; bloquearAdminLocal(); admSessao = false; fotos.clear(); fecharModal();
   document.querySelectorAll(".view").forEach(v => v.innerHTML = ""); $("#quem").textContent = "";
 }
 const erroAuth = m => { $("#a-err").textContent = m || ""; };
-async function bootstrap() {
-  $("#a-status").textContent = "Conectando ao Firebase…";
-  try { await iniciarFirebase(); }
-  catch (e) { $("#a-status").textContent = ""; erroAuth(e.message || msgErro(e)); return; }   // login continua visível
-  $("#a-status").textContent = "";
+let sessaoLigada = false;
+function ligarSessao() {
+  if (sessaoLigada) return; sessaoLigada = true;
   aoMudarSessao(async u => {
     if (registrando) return;
     if (!u) { limparSessaoVisual(); mostrar("auth"); return; }
     try { await iniciar(u); }
-    catch (e) { mostrar("auth"); erroAuth("Você está autenticado, mas não foi possível carregar seus dados (" + msgErro(e) + "). Verifique a conexão e as regras do Firestore e tente novamente."); }
+    catch (e) {
+      if (!$("#app").hidden) { toast("Não foi possível atualizar pela nuvem: " + msgErro(e), "warn"); atualizarRede(); return; }   // o app continua com os dados do aparelho
+      mostrar("auth"); erroAuth("Você está autenticado, mas não foi possível carregar seus dados (" + msgErro(e) + "). Verifique a conexão e as regras do Firestore e tente novamente.");
+    }
   });
+}
+async function bootstrap() {
+  $("#a-status").textContent = "Conectando ao Firebase…";
+  try { await iniciarFirebase(); }
+  catch (e) {                                      // Firebase não carregou (sem internet ou CDN bloqueada)
+    $("#a-status").textContent = "";
+    if (await iniciarLocal()) { toast("Sem conexão com o Firebase: usando os dados do aparelho. Os registros serão enviados quando a conexão voltar.", "warn"); return; }
+    erroAuth(e.message || msgErro(e)); return;     // primeiro acesso: a tela de login continua visível
+  }
+  $("#a-status").textContent = ""; ligarSessao();
 }
 // ===================== BOTÃO VOLTAR DO CELULAR =====================
 // O histórico do navegador mantém sempre uma entrada "base" e uma "armadilha" à frente. Ao tocar em voltar, o navegador cai na base;
